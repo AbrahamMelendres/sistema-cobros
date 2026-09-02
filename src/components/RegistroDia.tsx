@@ -3,8 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Registro, Estado, MetodoPago, TipoEquipo } from "@/lib/types";
+import * as XLSX from "xlsx";
 
-const MONTOS_PERMITIDOS = [10, 20] as const;
+const MONTOS_PERMITIDOS = [10, 20, 30] as const;
+const COLUMNAS_EXCEL = [
+  "Fecha", "N°", "Nombre completo", "CI", "Celular", "Monto (Bs)",
+  "Método", "Estado", "Equipo", "Observaciones",
+];
 
 function todayISO() {
   const d = new Date();
@@ -31,6 +36,8 @@ export default function RegistroDia() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [nombreEncargada, setNombreEncargada] = useState<string>("");
+  const [importando, setImportando] = useState(false);
+  const [mensajeExcel, setMensajeExcel] = useState<string | null>(null);
 
   useEffect(() => {
     async function cargarPerfil() {
@@ -89,7 +96,10 @@ export default function RegistroDia() {
     campo: keyof Registro,
     valor: string | number | null
   ) {
-    if (campo === "monto" && !MONTOS_PERMITIDOS.includes(valor as 10 | 20 | 30)) {
+    if (
+      campo === "monto" &&
+      !MONTOS_PERMITIDOS.includes(valor as (typeof MONTOS_PERMITIDOS)[number])
+    ) {
       return;
     }
 
@@ -134,6 +144,91 @@ export default function RegistroDia() {
     await supabase.from("registros").delete().eq("id", id);
   }
 
+  function exportarExcel() {
+    const filas = registros.map((registro) => ({
+      Fecha: registro.fecha,
+      "N°": registro.numero,
+      "Nombre completo": registro.nombre_completo ?? "",
+      CI: registro.ci ?? "",
+      Celular: registro.celular ?? "",
+      "Monto (Bs)": registro.monto,
+      Método: registro.metodo_pago ?? "",
+      Estado: registro.estado,
+      Equipo: registro.tipo_equipo ?? "",
+      Observaciones: registro.observaciones ?? "",
+    }));
+    const hoja = XLSX.utils.json_to_sheet(filas, { header: COLUMNAS_EXCEL });
+    hoja["!cols"] = [
+      { wch: 12 }, { wch: 6 }, { wch: 28 }, { wch: 14 }, { wch: 16 },
+      { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 32 },
+    ];
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Registros");
+    XLSX.writeFile(libro, `registros-${fecha}.xlsx`);
+    setMensajeExcel(`${registros.length} registro(s) exportado(s).`);
+  }
+
+  async function importarExcel(event: React.ChangeEvent<HTMLInputElement>) {
+    const archivo = event.target.files?.[0];
+    event.target.value = "";
+    if (!archivo) return;
+
+    setImportando(true);
+    setMensajeExcel(null);
+    try {
+      const libro = XLSX.read(await archivo.arrayBuffer(), { type: "array" });
+      const hoja = libro.Sheets[libro.SheetNames[0]];
+      const datos = XLSX.utils.sheet_to_json<Record<string, unknown>>(hoja);
+      const registrosParaInsertar = datos.map((fila, indice) => {
+        const fechaFila = String(fila.Fecha ?? fecha).trim();
+        const monto = Number(fila["Monto (Bs)"] ?? 10);
+        const estado = String(fila.Estado ?? "Pendiente").trim();
+        const metodo = String(fila.Método ?? "").trim();
+        const equipo = String(fila.Equipo ?? "").trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaFila)) {
+          throw new Error(`fila ${indice + 2}: fecha inválida`);
+        }
+        if (![10, 20, 30].includes(monto)) {
+          throw new Error(`fila ${indice + 2}: monto debe ser 10, 20 o 30`);
+        }
+        if (!["Pendiente", "Cancelado"].includes(estado)) {
+          throw new Error(`fila ${indice + 2}: estado inválido`);
+        }
+        if (metodo && !["Efectivo", "QR"].includes(metodo)) {
+          throw new Error(`fila ${indice + 2}: método inválido`);
+        }
+        if (equipo && !["Pc", "Laptop"].includes(equipo)) {
+          throw new Error(`fila ${indice + 2}: equipo inválido`);
+        }
+        return {
+          fecha: fechaFila,
+          numero: Number(fila["N°"] ?? indice + 1) || indice + 1,
+          nombre_completo: String(fila["Nombre completo"] ?? "").trim() || null,
+          ci: String(fila.CI ?? "").trim() || null,
+          celular: String(fila.Celular ?? "").trim() || null,
+          monto,
+          metodo_pago: (metodo || null) as MetodoPago | null,
+          estado: estado as Estado,
+          tipo_equipo: (equipo || null) as TipoEquipo | null,
+          observaciones: String(fila.Observaciones ?? "").trim() || null,
+          encargada: nombreEncargada || null,
+        };
+      });
+      if (registrosParaInsertar.length === 0) throw new Error("el archivo está vacío");
+      const { data, error } = await supabase.from("registros").insert(registrosParaInsertar).select();
+      if (error) throw new Error(error.message);
+      if (data) {
+        await cargarFechas();
+        await cargarRegistros(fecha);
+        setMensajeExcel(`${data.length} registro(s) importado(s).`);
+      }
+    } catch (error) {
+      setMensajeExcel(error instanceof Error ? `No se importó: ${error.message}` : "No se pudo importar el archivo.");
+    } finally {
+      setImportando(false);
+    }
+  }
+
   const cabecera = [
     "N°",
     "Nombre completo",
@@ -166,8 +261,25 @@ export default function RegistroDia() {
           >
             + Agregar registro
           </button>
+          <label className="cursor-pointer rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm font-medium hover:bg-[var(--color-navy-50)]">
+            {importando ? "Importando…" : "Importar Excel"}
+            <input type="file" accept=".xlsx,.xls" onChange={importarExcel} disabled={importando} className="sr-only" />
+          </label>
+          <button
+            onClick={exportarExcel}
+            disabled={registros.length === 0}
+            className="rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm font-medium hover:bg-[var(--color-navy-50)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Exportar Excel
+          </button>
         </div>
       </div>
+
+      {mensajeExcel && (
+        <p className="mb-4 rounded-lg bg-[var(--color-navy-50)] px-3 py-2 text-sm text-[var(--color-ink-soft)]">
+          {mensajeExcel}
+        </p>
+      )}
 
       {fechasConDatos.length > 1 && (
         <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
@@ -252,7 +364,7 @@ export default function RegistroDia() {
                       }
                       className="w-20 rounded-md border border-transparent hover:border-[var(--color-line)] focus:border-[var(--color-navy-700)] px-2 py-1 text-sm outline-none"
                     >
-                      {!MONTOS_PERMITIDOS.includes(r.monto as 10 | 20) && (
+                      {!MONTOS_PERMITIDOS.includes(r.monto as 10 | 20 | 30) && (
                         <option value={r.monto} disabled>
                           Inválido
                         </option>
