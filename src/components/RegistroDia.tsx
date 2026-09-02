@@ -722,7 +722,7 @@ export default function RegistroDia() {
                               <option value="Laptop">Laptop</option>
                             </select>
                           </div>
-                          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+                          <div className="grid grid-cols-1 gap-1 min-[1200px]:grid-cols-2">
                             {SERVICIOS.map((servicio) => {
                               const seleccionado = equipo.servicios.includes(servicio);
                               return (
