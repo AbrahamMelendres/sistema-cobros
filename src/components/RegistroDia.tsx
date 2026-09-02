@@ -722,13 +722,13 @@ export default function RegistroDia() {
                               <option value="Laptop">Laptop</option>
                             </select>
                           </div>
-                          <div className="grid grid-cols-2 gap-1">
+                          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
                             {SERVICIOS.map((servicio) => {
                               const seleccionado = equipo.servicios.includes(servicio);
                               return (
                                 <label
                                   key={servicio}
-                                  className={`flex cursor-pointer items-center gap-1 rounded-md px-1 py-1 text-xs transition-colors ${
+                                  className={`flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1 py-1 text-xs transition-colors ${
                                     seleccionado
                                       ? "bg-[var(--color-navy-50)] text-[var(--color-navy-900)]"
                                       : "text-[var(--color-ink-soft)] hover:bg-[var(--color-navy-50)]"
@@ -743,9 +743,9 @@ export default function RegistroDia() {
                                         : [...equipo.servicios, servicio];
                                       actualizarEquipo(r.id, indice, { servicios });
                                     }}
-                                    className="h-3.5 w-3.5 accent-[var(--color-navy-800)]"
+                                    className="h-3.5 w-3.5 shrink-0 accent-[var(--color-navy-800)]"
                                   />
-                                  <span>{servicio}</span>
+                                  <span className="min-w-0 break-words">{servicio}</span>
                                 </label>
                               );
                             })}
