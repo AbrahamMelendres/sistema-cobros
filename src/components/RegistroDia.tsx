@@ -9,14 +9,14 @@ import type {
   MetodoPago,
   Servicio,
   TipoEquipo,
+  EquipoRegistro,
   RegistroInput,
 } from "@/lib/types";
 import * as XLSX from "xlsx";
 
-const MONTOS_PERMITIDOS = [10, 20, 30] as const;
-const SERVICIOS: Servicio[] = ["Mantenimiento", "Formateo", "Optimizacion"];
+const SERVICIOS: Servicio[] = ["Mantenimiento", "Formateo", "Optimizacion", "Otros"];
 const COLUMNAS_EXCEL = [
-  "Fecha", "N°", "Nombre completo", "CI", "Celular", "Servicios", "Monto (Bs)",
+  "Fecha", "N°", "Nombre completo", "CI", "Celular", "Cantidad de equipos", "Servicios", "Monto (Bs)",
   "Método", "Estado de pago", "Equipo", "Observaciones",
 ];
 
@@ -77,6 +77,15 @@ function textoDeFila(valor: unknown) {
   return String(valor ?? "").trim();
 }
 
+function equiposDelRegistro(registro: Registro): EquipoRegistro[] {
+  if (registro.equipos?.length) return registro.equipos;
+  return [{ tipo_equipo: registro.tipo_equipo, servicios: registro.servicios ?? [] }];
+}
+
+function calcularMontoEquipos(equipos: EquipoRegistro[]) {
+  return equipos.reduce((total, equipo) => total + equipo.servicios.length * 10, 0) || 10;
+}
+
 export default function RegistroDia() {
   const supabase = useMemo(() => createClient(), []);
   const [fecha, setFecha] = useState(todayISO());
@@ -88,6 +97,7 @@ export default function RegistroDia() {
   const [importando, setImportando] = useState(false);
   const [mensajeExcel, setMensajeExcel] = useState<string | null>(null);
   const [vistaPrevia, setVistaPrevia] = useState<RegistroInput[] | null>(null);
+  const [busqueda, setBusqueda] = useState("");
 
   useEffect(() => {
     async function cargarPerfil() {
@@ -138,21 +148,42 @@ export default function RegistroDia() {
 
   useEffect(() => {
     cargarRegistros(fecha);
+    setBusqueda("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fecha]);
+
+  const registrosFiltrados = useMemo(() => {
+    const termino = normalizarOpcion(busqueda);
+    if (!termino) return registros;
+
+    return registros.filter((registro) => {
+      const contenido = [
+        registro.numero,
+        registro.nombre_completo,
+        registro.ci,
+        registro.celular,
+        equiposDelRegistro(registro).flatMap((equipo) => [
+          equipo.tipo_equipo,
+          equipo.servicios.join(" "),
+        ]),
+        registro.monto,
+        registro.metodo_pago,
+        registro.estado_pago,
+        registro.tipo_equipo,
+        registro.observaciones,
+      ]
+        .map((valor) => normalizarOpcion(valor))
+        .join(" ");
+
+      return contenido.includes(termino);
+    });
+  }, [busqueda, registros]);
 
   async function actualizarCampo(
     id: string,
     campo: keyof Registro,
     valor: string | number | string[] | null
   ) {
-    if (
-      campo === "monto" &&
-      !MONTOS_PERMITIDOS.includes(valor as (typeof MONTOS_PERMITIDOS)[number])
-    ) {
-      return;
-    }
-
     setRegistros((prev) =>
       prev.map((r) => (r.id === id ? { ...r, [campo]: valor } : r))
     );
@@ -164,15 +195,55 @@ export default function RegistroDia() {
     setSavingId(null);
   }
 
-  async function actualizarServicios(id: string, servicios: Servicio[]) {
-    if (servicios.length === 0) return;
-    const monto = servicios.length * 10;
+  async function actualizarEquipos(id: string, equipos: EquipoRegistro[]) {
+    const registro = registros.find((item) => item.id === id);
+    if (!registro) return;
+    const monto = calcularMontoEquipos(equipos);
+    const primerEquipo = equipos[0];
     setRegistros((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, servicios, monto } : r))
+      prev.map((r) => (r.id === id
+        ? {
+            ...r,
+            equipos,
+            cantidad_equipos: equipos.length,
+            tipo_equipo: primerEquipo?.tipo_equipo ?? null,
+            servicios: primerEquipo?.servicios ?? [],
+            monto,
+          }
+        : r))
     );
     setSavingId(id);
-    await supabase.from("registros").update({ servicios, monto }).eq("id", id);
+    await supabase
+      .from("registros")
+      .update({
+        equipos,
+        cantidad_equipos: equipos.length,
+        tipo_equipo: primerEquipo?.tipo_equipo ?? null,
+        servicios: primerEquipo?.servicios ?? [],
+        monto,
+      })
+      .eq("id", id);
     setSavingId(null);
+  }
+
+  async function actualizarCantidadEquipos(id: string, valor: number) {
+    const cantidadEquipos = Math.max(1, Math.floor(valor) || 1);
+    const registro = registros.find((item) => item.id === id);
+    if (!registro) return;
+    const equiposActuales = equiposDelRegistro(registro);
+    const equipos = Array.from({ length: cantidadEquipos }, (_, indice) =>
+      equiposActuales[indice] ?? { tipo_equipo: null, servicios: [] }
+    );
+    await actualizarEquipos(id, equipos);
+  }
+
+  async function actualizarEquipo(id: string, indice: number, cambios: Partial<EquipoRegistro>) {
+    const registro = registros.find((item) => item.id === id);
+    if (!registro) return;
+    const equipos = equiposDelRegistro(registro).map((equipo, equipoIndice) =>
+      equipoIndice === indice ? { ...equipo, ...cambios } : equipo
+    );
+    await actualizarEquipos(id, equipos);
   }
 
   async function actualizarPago(id: string, estadoPago: EstadoPago) {
@@ -194,6 +265,8 @@ export default function RegistroDia() {
       .insert({
         fecha,
         numero: siguienteNumero,
+        cantidad_equipos: 1,
+        equipos: [{ tipo_equipo: null, servicios: [] }],
         monto: 10,
         estado: "Pendiente" as Estado,
         estado_pago: "Pendiente" as EstadoPago,
@@ -218,23 +291,27 @@ export default function RegistroDia() {
   }
 
   function exportarExcel() {
-    const filas = registros.map((registro) => ({
-      Fecha: registro.fecha,
-      "N°": registro.numero,
-      "Nombre completo": registro.nombre_completo ?? "",
-      CI: registro.ci ?? "",
-      Celular: registro.celular ?? "",
-      Servicios: registro.servicios?.join(", ") ?? "",
-      "Monto (Bs)": registro.monto,
-      Método: registro.metodo_pago ?? "",
-      "Estado de pago": registro.estado_pago ?? (registro.estado === "Cancelado" ? "Pagado" : "Pendiente"),
-      Equipo: registro.tipo_equipo ?? "",
-      Observaciones: registro.observaciones ?? "",
-    }));
+    const filas = registros.map((registro) => {
+      const equipos = equiposDelRegistro(registro);
+      return {
+        Fecha: registro.fecha,
+        "N°": registro.numero,
+        "Nombre completo": registro.nombre_completo ?? "",
+        CI: registro.ci ?? "",
+        Celular: registro.celular ?? "",
+        "Cantidad de equipos": equipos.length,
+        Servicios: equipos.map((equipo, indice) => `Equipo ${indice + 1}: ${equipo.servicios.join(", ") || "Sin seleccionar"}`).join(" | "),
+        "Monto (Bs)": registro.monto,
+        Método: registro.metodo_pago ?? "",
+        "Estado de pago": registro.estado_pago ?? (registro.estado === "Cancelado" ? "Pagado" : "Pendiente"),
+        Equipo: equipos.map((equipo, indice) => `Equipo ${indice + 1}: ${equipo.tipo_equipo ?? "Sin tipo"}`).join(" | "),
+        Observaciones: registro.observaciones ?? "",
+      };
+    });
     const hoja = XLSX.utils.json_to_sheet(filas, { header: COLUMNAS_EXCEL });
     hoja["!cols"] = [
       { wch: 12 }, { wch: 6 }, { wch: 28 }, { wch: 14 }, { wch: 16 },
-      { wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 12 }, { wch: 32 },
+      { wch: 20 }, { wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 12 }, { wch: 32 },
     ];
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, "Registros");
@@ -249,6 +326,7 @@ export default function RegistroDia() {
       "Nombre completo": "Ejemplo Cliente",
       CI: "1234567",
       Celular: "70000000",
+      "Cantidad de equipos": 1,
       Servicios: "Mantenimiento, Formateo",
       "Monto (Bs)": 20,
       Método: "Efectivo",
@@ -299,6 +377,7 @@ export default function RegistroDia() {
         const celular = textoDeFila(valorDeFila(fila, ["celular", "ndecelular", "numerodecelular", "telefonocelular", "telefono", "movil", "contacto"]));
         const metodoTexto = textoDeFila(valorDeFila(fila, ["metodo", "metododepago", "metodopago", "formadepago", "pago"]));
         const equipoTexto = textoDeFila(valorDeFila(fila, ["equipo", "tipodeequipo", "tipoequipo", "dispositivo"]));
+        const cantidadEquipos = Math.max(1, Math.floor(Number(valorDeFila(fila, ["cantidaddeequipos", "cantidad", "equipos", "numerodeequipos"])) || 1));
         const servicioTexto = textoDeFila(valorDeFila(fila, ["servicio", "servicios", "tiposervicio", "trabajo"]));
         const servicios = servicioTexto.split(/[,;/+]|\s+y\s+/i).map((valor) => valor.trim()).filter(Boolean);
         const serviciosNormalizados = servicios.map((valor) => {
@@ -306,6 +385,7 @@ export default function RegistroDia() {
           if (opcion === "mantenimiento") return "Mantenimiento";
           if (opcion === "formateo") return "Formateo";
           if (opcion === "optimizacion") return "Optimizacion";
+          if (opcion === "otros" || opcion === "otro") return "Otros";
           throw new Error(`fila ${indice + 2}: servicio inválido`);
         }) as Servicio[];
         const montoTexto = String(valorDeFila(fila, ["montobs", "monto", "importe", "precio"]) || "10")
@@ -313,11 +393,11 @@ export default function RegistroDia() {
           .replace(/\s/g, "")
           .replace(",", ".");
         const montoExcel = Number(montoTexto);
-        const monto = serviciosNormalizados.length > 0 ? serviciosNormalizados.length * 10 : montoExcel;
+        const monto = serviciosNormalizados.length > 0 ? serviciosNormalizados.length * cantidadEquipos * 10 : montoExcel;
         const estadoTexto = normalizarOpcion(valorDeFila(fila, ["estadodepago", "pagodelservicio", "estadopago", "estado", "situacion"]));
         const estadoPago: EstadoPago = estadoTexto === "pagado" || estadoTexto === "cancelado" ? "Pagado" : "Pendiente";
         if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaFila)) throw new Error(`fila ${indice + 2}: fecha inválida`);
-        if (![10, 20, 30].includes(monto)) throw new Error(`fila ${indice + 2}: monto debe ser 10, 20 o 30`);
+        if (!Number.isFinite(monto) || monto <= 0) throw new Error(`fila ${indice + 2}: monto inválido`);
         if (metodoTexto && !["efectivo", "qr"].includes(normalizarOpcion(metodoTexto))) throw new Error(`fila ${indice + 2}: método inválido`);
         if (equipoTexto && !["pc", "laptop"].includes(normalizarOpcion(equipoTexto))) throw new Error(`fila ${indice + 2}: equipo inválido`);
         return {
@@ -326,6 +406,11 @@ export default function RegistroDia() {
           nombre_completo: nombre || null,
           ci: ci || null,
           celular: celular || null,
+          cantidad_equipos: cantidadEquipos,
+          equipos: [{
+            tipo_equipo: (equipoTexto ? (normalizarOpcion(equipoTexto) === "laptop" ? "Laptop" : "Pc") : null) as TipoEquipo | null,
+            servicios: serviciosNormalizados,
+          }],
           monto,
           metodo_pago: (metodoTexto ? (normalizarOpcion(metodoTexto) === "qr" ? "QR" : "Efectivo") : null) as MetodoPago | null,
           estado: estadoPago === "Pagado" ? "Cancelado" : "Pendiente",
@@ -351,7 +436,8 @@ export default function RegistroDia() {
     "Nombre completo",
     "CI",
     "Celular",
-    "Servicios",
+    "Cantidad",
+    "Equipos y servicios",
     "Monto (Bs)",
     "Método",
     "Estado de pago",
@@ -483,6 +569,34 @@ export default function RegistroDia() {
         </div>
       )}
 
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <label className="flex min-w-[min(100%,20rem)] flex-1 items-center gap-2 rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 focus-within:border-[var(--color-navy-700)]">
+          <span className="text-[var(--color-ink-soft)]" aria-hidden="true">⌕</span>
+          <input
+            type="search"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar por nombre, CI, celular o servicio"
+            aria-label="Buscar registros"
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--color-ink-soft)]"
+          />
+          {busqueda && (
+            <button
+              type="button"
+              onClick={() => setBusqueda("")}
+              className="text-xs text-[var(--color-ink-soft)] hover:text-[var(--color-navy-900)]"
+              aria-label="Limpiar búsqueda"
+              title="Limpiar búsqueda"
+            >
+              Limpiar
+            </button>
+          )}
+        </label>
+        <span className="text-xs text-[var(--color-ink-soft)]">
+          {busqueda ? `${registrosFiltrados.length} de ${registros.length} registro(s)` : `${registros.length} registro(s)`}
+        </span>
+      </div>
+
       <div className="bg-white rounded-xl border border-[var(--color-line)] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -499,21 +613,28 @@ export default function RegistroDia() {
               </tr>
             </thead>
             <tbody>
-              {loading && (
+                {loading && (
                 <tr>
-                    <td colSpan={12} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
+                  <td colSpan={11} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
                     Cargando…
                   </td>
                 </tr>
               )}
               {!loading && registros.length === 0 && (
                 <tr>
-                    <td colSpan={12} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
+                    <td colSpan={11} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
                     Todavía no hay registros para este día. Usa &ldquo;Agregar registro&rdquo;.
                   </td>
                 </tr>
               )}
-              {registros.map((r) => (
+              {!loading && registros.length > 0 && registrosFiltrados.length === 0 && (
+                <tr>
+                  <td colSpan={11} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
+                    No se encontraron registros con &ldquo;{busqueda}&rdquo;.
+                  </td>
+                </tr>
+              )}
+              {registrosFiltrados.map((r) => (
                 <tr
                   key={r.id}
                   className="border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-navy-50)]/50"
@@ -541,6 +662,70 @@ export default function RegistroDia() {
                     />
                   </td>
                   <td className="px-2 py-1">
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      defaultValue={r.cantidad_equipos ?? 1}
+                      onBlur={(e) => actualizarCantidadEquipos(r.id, Number(e.target.value))}
+                      className="w-16 rounded-md border border-[var(--color-line)] px-2 py-1 text-sm outline-none focus:border-[var(--color-navy-700)]"
+                      aria-label={`Cantidad de equipos de ${r.nombre_completo || "este registro"}`}
+                    />
+                  </td>
+                  <td className="px-2 py-1">
+                    <div className="space-y-2 min-w-64">
+                      {equiposDelRegistro(r).map((equipo, indice) => (
+                        <div key={indice} className="rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-2">
+                          <div className="mb-1.5 flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-ink-soft)]">
+                              Equipo {indice + 1}
+                            </span>
+                            <select
+                              value={equipo.tipo_equipo ?? ""}
+                              onChange={(e) => actualizarEquipo(r.id, indice, {
+                                tipo_equipo: (e.target.value || null) as TipoEquipo | null,
+                              })}
+                              className="rounded-md border border-[var(--color-line)] px-2 py-1 text-xs bg-white"
+                              aria-label={`Tipo del equipo ${indice + 1}`}
+                            >
+                              <option value="">Tipo</option>
+                              <option value="Pc">Pc</option>
+                              <option value="Laptop">Laptop</option>
+                            </select>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1">
+                            {SERVICIOS.map((servicio) => {
+                              const seleccionado = equipo.servicios.includes(servicio);
+                              return (
+                                <label
+                                  key={servicio}
+                                  className={`flex cursor-pointer items-center gap-1 rounded-md px-1 py-1 text-xs transition-colors ${
+                                    seleccionado
+                                      ? "bg-[var(--color-navy-50)] text-[var(--color-navy-900)]"
+                                      : "text-[var(--color-ink-soft)] hover:bg-[var(--color-navy-50)]"
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={seleccionado}
+                                    onChange={() => {
+                                      const servicios = seleccionado
+                                        ? equipo.servicios.filter((item) => item !== servicio)
+                                        : [...equipo.servicios, servicio];
+                                      actualizarEquipo(r.id, indice, { servicios });
+                                    }}
+                                    className="h-3.5 w-3.5 accent-[var(--color-navy-800)]"
+                                  />
+                                  <span>{servicio}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-2 py-1">
                     <select
                       value={r.metodo_pago ?? ""}
                       onChange={(e) =>
@@ -556,42 +741,6 @@ export default function RegistroDia() {
                       <option value="Efectivo">Efectivo</option>
                       <option value="QR">QR</option>
                     </select>
-                  </td>
-                  <td className="px-2 py-1">
-                    <div className="w-48 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-2">
-                      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-ink-soft)]">
-                        Servicios (10 Bs c/u)
-                      </p>
-                      <div className="space-y-1">
-                        {SERVICIOS.map((servicio) => {
-                          const seleccionado = (r.servicios ?? []).includes(servicio);
-                          return (
-                            <label
-                              key={servicio}
-                              className={`flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-xs transition-colors ${
-                                seleccionado
-                                  ? "bg-[var(--color-navy-50)] text-[var(--color-navy-900)]"
-                                  : "text-[var(--color-ink-soft)] hover:bg-[var(--color-navy-50)]"
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={seleccionado}
-                                onChange={() => {
-                                  const serviciosActuales = r.servicios ?? [];
-                                  const nuevosServicios = seleccionado
-                                    ? serviciosActuales.filter((item) => item !== servicio)
-                                    : [...serviciosActuales, servicio];
-                                  actualizarServicios(r.id, nuevosServicios);
-                                }}
-                                className="h-3.5 w-3.5 accent-[var(--color-navy-800)]"
-                              />
-                              <span>{servicio}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
                   </td>
                   <td className="px-2 py-1">
                     <span className="inline-flex min-w-16 justify-center rounded-md bg-[var(--color-navy-50)] px-2 py-1 text-sm font-semibold text-[var(--color-navy-900)]">
@@ -612,23 +761,6 @@ export default function RegistroDia() {
                     >
                       <option value="Pendiente">Pendiente</option>
                       <option value="Pagado">Pagado</option>
-                    </select>
-                  </td>
-                  <td className="px-2 py-1">
-                    <select
-                      value={r.tipo_equipo ?? ""}
-                      onChange={(e) =>
-                        actualizarCampo(
-                          r.id,
-                          "tipo_equipo",
-                          (e.target.value || null) as TipoEquipo | null
-                        )
-                      }
-                      className="rounded-md border border-[var(--color-line)] px-2 py-1 text-sm bg-white"
-                    >
-                      <option value="">—</option>
-                      <option value="Pc">Pc</option>
-                      <option value="Laptop">Laptop</option>
                     </select>
                   </td>
                   <td className="px-2 py-1">

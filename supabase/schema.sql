@@ -9,7 +9,9 @@ create table if not exists public.registros (
   nombre_completo text,
   ci text,
   celular text,
-  monto numeric not null default 10 check (monto in (10, 20, 30)),
+  cantidad_equipos int not null default 1 check (cantidad_equipos > 0),
+  equipos jsonb not null default '[]'::jsonb,
+  monto numeric not null default 10 check (monto > 0),
   metodo_pago text check (metodo_pago in ('Efectivo', 'QR') or metodo_pago is null),
   estado text not null default 'Pendiente' check (estado in ('Pendiente', 'Cancelado')),
   servicios text[] not null default '{}',
@@ -55,12 +57,19 @@ $$;
 -- Migración para una instalación que ya tiene creada la tabla registros.
 alter table public.registros add column if not exists servicio text;
 alter table public.registros add column if not exists servicios text[] not null default '{}';
+alter table public.registros add column if not exists cantidad_equipos int not null default 1;
+alter table public.registros add column if not exists equipos jsonb not null default '[]'::jsonb;
+update public.registros set cantidad_equipos = 1 where cantidad_equipos is null or cantidad_equipos < 1;
+alter table public.registros drop constraint if exists registros_cantidad_equipos_check;
+alter table public.registros add constraint registros_cantidad_equipos_check check (cantidad_equipos > 0);
+alter table public.registros drop constraint if exists registros_monto_check;
+alter table public.registros add constraint registros_monto_check check (monto > 0);
 update public.registros
 set servicios = case when servicio is null or servicio = '' then '{}' else array[servicio] end
 where servicios = '{}';
 alter table public.registros drop constraint if exists registros_servicios_check;
 alter table public.registros add constraint registros_servicios_check
-  check (servicios <@ array['Mantenimiento', 'Formateo', 'Optimizacion']::text[]);
+  check (servicios <@ array['Mantenimiento', 'Formateo', 'Optimizacion', 'Otros']::text[]);
 alter table public.registros add column if not exists estado_pago text;
 update public.registros
 set estado_pago = case when estado = 'Cancelado' then 'Pagado' else 'Pendiente' end
@@ -69,7 +78,7 @@ alter table public.registros alter column estado_pago set default 'Pendiente';
 alter table public.registros alter column estado_pago set not null;
 alter table public.registros drop constraint if exists registros_servicio_check;
 alter table public.registros add constraint registros_servicio_check
-  check (servicio in ('Mantenimiento', 'Formateo', 'Optimizacion') or servicio is null);
+  check (servicio in ('Mantenimiento', 'Formateo', 'Optimizacion', 'Otros') or servicio is null);
 alter table public.registros drop constraint if exists registros_estado_pago_check;
 alter table public.registros add constraint registros_estado_pago_check
   check (estado_pago in ('Pendiente', 'Pagado'));

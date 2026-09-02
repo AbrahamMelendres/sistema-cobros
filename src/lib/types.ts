@@ -1,8 +1,13 @@
 export type MetodoPago = "Efectivo" | "QR";
 export type Estado = "Pendiente" | "Cancelado";
 export type TipoEquipo = "Pc" | "Laptop";
-export type Servicio = "Mantenimiento" | "Formateo" | "Optimizacion";
+export type Servicio = "Mantenimiento" | "Formateo" | "Optimizacion" | "Otros";
 export type EstadoPago = "Pendiente" | "Pagado";
+
+export interface EquipoRegistro {
+  tipo_equipo: TipoEquipo | null;
+  servicios: Servicio[];
+}
 
 export interface Registro {
   id: string;
@@ -11,6 +16,8 @@ export interface Registro {
   nombre_completo: string | null;
   ci: string | null;
   celular: string | null;
+  cantidad_equipos: number;
+  equipos: EquipoRegistro[];
   monto: number;
   metodo_pago: MetodoPago | null;
   estado: Estado;

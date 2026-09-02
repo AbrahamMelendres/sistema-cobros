@@ -4,6 +4,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Registro de Cobros — Academia Técnica de Ingeniería y Tecnologías Informáticas",
   description: "Sistema de registro de cobros",
+  icons: {
+    icon: "/logo.jpeg",
+  },
 };
 
 export default function RootLayout({
