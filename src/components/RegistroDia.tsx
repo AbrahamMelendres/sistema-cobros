@@ -17,7 +17,7 @@ import * as XLSX from "xlsx";
 const SERVICIOS: Servicio[] = ["Mantenimiento", "Formateo", "Optimizacion", "Otros"];
 const COLUMNAS_EXCEL = [
   "Fecha", "N°", "Nombre completo", "CI", "Celular", "Cantidad de equipos", "Servicios", "Monto (Bs)",
-  "Método", "Estado de pago", "Equipo", "Observaciones",
+  "Método", "Estado de pago", "Observaciones",
 ];
 
 function todayISO() {
@@ -78,8 +78,18 @@ function textoDeFila(valor: unknown) {
 }
 
 function equiposDelRegistro(registro: Registro): EquipoRegistro[] {
-  if (registro.equipos?.length) return registro.equipos;
-  return [{ tipo_equipo: registro.tipo_equipo, servicios: registro.servicios ?? [] }];
+  if (registro.equipos?.length) {
+    return registro.equipos.map((equipo) => ({
+      tipo_equipo: equipo.tipo_equipo ?? null,
+      servicios: equipo.servicios ?? [],
+      descripcion: equipo.descripcion ?? "",
+    }));
+  }
+  return [{
+    tipo_equipo: registro.tipo_equipo,
+    servicios: registro.servicios ?? [],
+    descripcion: registro.observaciones ?? "",
+  }];
 }
 
 function calcularMontoEquipos(equipos: EquipoRegistro[]) {
@@ -188,11 +198,15 @@ export default function RegistroDia() {
       prev.map((r) => (r.id === id ? { ...r, [campo]: valor } : r))
     );
     setSavingId(id);
-    await supabase
+    const { error } = await supabase
       .from("registros")
       .update({ [campo]: valor })
       .eq("id", id);
     setSavingId(null);
+    if (error) {
+      setMensajeExcel(`No se pudo guardar el cambio: ${error.message}`);
+      await cargarRegistros(fecha);
+    }
   }
 
   async function actualizarEquipos(id: string, equipos: EquipoRegistro[]) {
@@ -213,7 +227,7 @@ export default function RegistroDia() {
         : r))
     );
     setSavingId(id);
-    await supabase
+    const { error } = await supabase
       .from("registros")
       .update({
         equipos,
@@ -224,6 +238,10 @@ export default function RegistroDia() {
       })
       .eq("id", id);
     setSavingId(null);
+    if (error) {
+      setMensajeExcel(`No se pudo guardar el equipo: ${error.message}`);
+      await cargarRegistros(fecha);
+    }
   }
 
   async function actualizarCantidadEquipos(id: string, valor: number) {
@@ -232,7 +250,7 @@ export default function RegistroDia() {
     if (!registro) return;
     const equiposActuales = equiposDelRegistro(registro);
     const equipos = Array.from({ length: cantidadEquipos }, (_, indice) =>
-      equiposActuales[indice] ?? { tipo_equipo: null, servicios: [] }
+      equiposActuales[indice] ?? { tipo_equipo: null, servicios: [], descripcion: "" }
     );
     await actualizarEquipos(id, equipos);
   }
@@ -252,8 +270,12 @@ export default function RegistroDia() {
       prev.map((r) => (r.id === id ? { ...r, estado_pago: estadoPago, estado } : r))
     );
     setSavingId(id);
-    await supabase.from("registros").update({ estado_pago: estadoPago, estado }).eq("id", id);
+    const { error } = await supabase.from("registros").update({ estado_pago: estadoPago, estado }).eq("id", id);
     setSavingId(null);
+    if (error) {
+      setMensajeExcel(`No se pudo actualizar el pago: ${error.message}`);
+      await cargarRegistros(fecha);
+    }
   }
 
   async function agregarFila() {
@@ -266,7 +288,7 @@ export default function RegistroDia() {
         fecha,
         numero: siguienteNumero,
         cantidad_equipos: 1,
-        equipos: [{ tipo_equipo: null, servicios: [] }],
+        equipos: [{ tipo_equipo: null, servicios: [], descripcion: "" }],
         monto: 10,
         estado: "Pendiente" as Estado,
         estado_pago: "Pendiente" as EstadoPago,
@@ -276,7 +298,12 @@ export default function RegistroDia() {
       .select()
       .single();
 
-    if (!error && data) {
+    if (error) {
+      setMensajeExcel(`No se pudo agregar el registro: ${error.message}`);
+      return;
+    }
+
+    if (data) {
       setRegistros((prev) => [...prev, data as Registro]);
       if (!fechasConDatos.includes(fecha)) {
         setFechasConDatos((prev) => [fecha, ...prev]);
@@ -287,7 +314,11 @@ export default function RegistroDia() {
   async function borrarFila(id: string) {
     if (!confirm("¿Eliminar este registro?")) return;
     setRegistros((prev) => prev.filter((r) => r.id !== id));
-    await supabase.from("registros").delete().eq("id", id);
+    const { error } = await supabase.from("registros").delete().eq("id", id);
+    if (error) {
+      setMensajeExcel(`No se pudo eliminar el registro: ${error.message}`);
+      await cargarRegistros(fecha);
+    }
   }
 
   function exportarExcel() {
@@ -304,8 +335,7 @@ export default function RegistroDia() {
         "Monto (Bs)": registro.monto,
         Método: registro.metodo_pago ?? "",
         "Estado de pago": registro.estado_pago ?? (registro.estado === "Cancelado" ? "Pagado" : "Pendiente"),
-        Equipo: equipos.map((equipo, indice) => `Equipo ${indice + 1}: ${equipo.tipo_equipo ?? "Sin tipo"}`).join(" | "),
-        Observaciones: registro.observaciones ?? "",
+        Observaciones: equipos.map((equipo, indice) => `Equipo ${indice + 1}: ${equipo.descripcion || "Sin descripción"}`).join(" | "),
       };
     });
     const hoja = XLSX.utils.json_to_sheet(filas, { header: COLUMNAS_EXCEL });
@@ -331,7 +361,6 @@ export default function RegistroDia() {
       "Monto (Bs)": 20,
       Método: "Efectivo",
       "Estado de pago": "Pendiente",
-      Equipo: "Pc",
       Observaciones: "",
     }];
     const hoja = XLSX.utils.json_to_sheet(filas, { header: COLUMNAS_EXCEL });
@@ -410,6 +439,7 @@ export default function RegistroDia() {
           equipos: [{
             tipo_equipo: (equipoTexto ? (normalizarOpcion(equipoTexto) === "laptop" ? "Laptop" : "Pc") : null) as TipoEquipo | null,
             servicios: serviciosNormalizados,
+            descripcion: textoDeFila(valorDeFila(fila, ["descripcion", "descripcionequipo", "detalle", "observaciones", "observacion"])) || "",
           }],
           monto,
           metodo_pago: (metodoTexto ? (normalizarOpcion(metodoTexto) === "qr" ? "QR" : "Efectivo") : null) as MetodoPago | null,
@@ -441,7 +471,6 @@ export default function RegistroDia() {
     "Monto (Bs)",
     "Método",
     "Estado de pago",
-    "Equipo",
     "Observaciones",
     "",
   ];
@@ -673,7 +702,7 @@ export default function RegistroDia() {
                     />
                   </td>
                   <td className="px-2 py-1">
-                    <div className="space-y-2 min-w-64">
+                    <div className="grid grid-cols-1 min-[1200px]:grid-cols-2 gap-2 min-w-64">
                       {equiposDelRegistro(r).map((equipo, indice) => (
                         <div key={indice} className="rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-2">
                           <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -721,6 +750,14 @@ export default function RegistroDia() {
                               );
                             })}
                           </div>
+                          <input
+                            type="text"
+                            defaultValue={equipo.descripcion}
+                            onBlur={(e) => actualizarEquipo(r.id, indice, { descripcion: e.target.value })}
+                            placeholder="Descripción del equipo"
+                            aria-label={`Descripción del equipo ${indice + 1}`}
+                            className="mt-2 w-full rounded-md border border-[var(--color-line)] px-2 py-1.5 text-xs outline-none focus:border-[var(--color-navy-700)]"
+                          />
                         </div>
                       ))}
                     </div>

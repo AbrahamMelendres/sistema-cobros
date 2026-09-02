@@ -7,6 +7,7 @@ export type EstadoPago = "Pendiente" | "Pagado";
 export interface EquipoRegistro {
   tipo_equipo: TipoEquipo | null;
   servicios: Servicio[];
+  descripcion: string;
 }
 
 export interface Registro {
