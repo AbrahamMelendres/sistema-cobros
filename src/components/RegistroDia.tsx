@@ -627,10 +627,10 @@ export default function RegistroDia() {
       </div>
 
       <div className="bg-white rounded-xl border border-[var(--color-line)] overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="max-h-[calc(100vh-16rem)] min-h-[18rem] overflow-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[var(--color-line)] bg-[var(--color-navy-50)]">
+              <tr className="sticky top-0 z-10 border-b border-[var(--color-line)] bg-[var(--color-navy-50)]">
                 {cabecera.map((c) => (
                   <th
                     key={c}
