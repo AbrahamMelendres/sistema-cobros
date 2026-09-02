@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Registro, Estado, MetodoPago, TipoEquipo } from "@/lib/types";
 
+const MONTOS_PERMITIDOS = [10, 20] as const;
+
 function todayISO() {
   const d = new Date();
   const tz = d.getTimezoneOffset();
@@ -87,6 +89,10 @@ export default function RegistroDia() {
     campo: keyof Registro,
     valor: string | number | null
   ) {
+    if (campo === "monto" && !MONTOS_PERMITIDOS.includes(valor as 10 | 20 | 30)) {
+      return;
+    }
+
     setRegistros((prev) =>
       prev.map((r) => (r.id === id ? { ...r, [campo]: valor } : r))
     );
@@ -239,14 +245,24 @@ export default function RegistroDia() {
                     />
                   </td>
                   <td className="px-2 py-1">
-                    <input
-                      type="number"
-                      defaultValue={r.monto}
-                      onBlur={(e) =>
-                        actualizarCampo(r.id, "monto", parseFloat(e.target.value) || 0)
+                    <select
+                      value={r.monto}
+                      onChange={(e) =>
+                        actualizarCampo(r.id, "monto", Number(e.target.value))
                       }
                       className="w-20 rounded-md border border-transparent hover:border-[var(--color-line)] focus:border-[var(--color-navy-700)] px-2 py-1 text-sm outline-none"
-                    />
+                    >
+                      {!MONTOS_PERMITIDOS.includes(r.monto as 10 | 20) && (
+                        <option value={r.monto} disabled>
+                          Inválido
+                        </option>
+                      )}
+                      {MONTOS_PERMITIDOS.map((monto) => (
+                        <option key={monto} value={monto}>
+                          {monto}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td className="px-2 py-1">
                     <select

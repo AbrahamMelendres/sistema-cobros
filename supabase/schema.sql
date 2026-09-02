@@ -9,7 +9,7 @@ create table if not exists public.registros (
   nombre_completo text,
   ci text,
   celular text,
-  monto numeric not null default 0,
+  monto numeric not null default 10 check (monto in (10, 20, 30,40, 50, 60, 70, 80, 90, 100)),
   metodo_pago text check (metodo_pago in ('Efectivo', 'QR') or metodo_pago is null),
   estado text not null default 'Pendiente' check (estado in ('Pendiente', 'Cancelado')),
   observaciones text,
