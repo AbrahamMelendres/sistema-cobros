@@ -2,13 +2,22 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Registro, Estado, MetodoPago, TipoEquipo } from "@/lib/types";
+import type {
+  Registro,
+  Estado,
+  EstadoPago,
+  MetodoPago,
+  Servicio,
+  TipoEquipo,
+  RegistroInput,
+} from "@/lib/types";
 import * as XLSX from "xlsx";
 
 const MONTOS_PERMITIDOS = [10, 20, 30] as const;
+const SERVICIOS: Servicio[] = ["Mantenimiento", "Formateo", "Optimizacion"];
 const COLUMNAS_EXCEL = [
-  "Fecha", "N°", "Nombre completo", "CI", "Celular", "Monto (Bs)",
-  "Método", "Estado", "Equipo", "Observaciones",
+  "Fecha", "N°", "Nombre completo", "CI", "Celular", "Servicios", "Monto (Bs)",
+  "Método", "Estado de pago", "Equipo", "Observaciones",
 ];
 
 function todayISO() {
@@ -28,6 +37,46 @@ function formatDiaLabel(iso: string) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+function normalizarEncabezado(valor: unknown) {
+  return String(valor ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function valorDeFila(fila: Record<string, unknown>, nombres: string[]) {
+  const entradas = Object.entries(fila);
+  const entrada = entradas.find(([encabezado]) =>
+    nombres.includes(normalizarEncabezado(encabezado))
+  );
+  return entrada?.[1];
+}
+
+function fechaDeExcel(valor: unknown, fechaPorDefecto: string) {
+  if (typeof valor === "number") {
+    const fecha = XLSX.SSF.parse_date_code(valor);
+    if (fecha) {
+      return `${fecha.y.toString().padStart(4, "0")}-${fecha.m.toString().padStart(2, "0")}-${fecha.d.toString().padStart(2, "0")}`;
+    }
+  }
+  const texto = String(valor ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto;
+  return fechaPorDefecto;
+}
+
+function normalizarOpcion(valor: unknown) {
+  return String(valor ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function textoDeFila(valor: unknown) {
+  return String(valor ?? "").trim();
+}
+
 export default function RegistroDia() {
   const supabase = useMemo(() => createClient(), []);
   const [fecha, setFecha] = useState(todayISO());
@@ -38,6 +87,7 @@ export default function RegistroDia() {
   const [nombreEncargada, setNombreEncargada] = useState<string>("");
   const [importando, setImportando] = useState(false);
   const [mensajeExcel, setMensajeExcel] = useState<string | null>(null);
+  const [vistaPrevia, setVistaPrevia] = useState<RegistroInput[] | null>(null);
 
   useEffect(() => {
     async function cargarPerfil() {
@@ -94,7 +144,7 @@ export default function RegistroDia() {
   async function actualizarCampo(
     id: string,
     campo: keyof Registro,
-    valor: string | number | null
+    valor: string | number | string[] | null
   ) {
     if (
       campo === "monto" &&
@@ -114,6 +164,27 @@ export default function RegistroDia() {
     setSavingId(null);
   }
 
+  async function actualizarServicios(id: string, servicios: Servicio[]) {
+    if (servicios.length === 0) return;
+    const monto = servicios.length * 10;
+    setRegistros((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, servicios, monto } : r))
+    );
+    setSavingId(id);
+    await supabase.from("registros").update({ servicios, monto }).eq("id", id);
+    setSavingId(null);
+  }
+
+  async function actualizarPago(id: string, estadoPago: EstadoPago) {
+    const estado = estadoPago === "Pagado" ? "Cancelado" : "Pendiente";
+    setRegistros((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, estado_pago: estadoPago, estado } : r))
+    );
+    setSavingId(id);
+    await supabase.from("registros").update({ estado_pago: estadoPago, estado }).eq("id", id);
+    setSavingId(null);
+  }
+
   async function agregarFila() {
     const siguienteNumero =
       registros.reduce((max, r) => Math.max(max, r.numero ?? 0), 0) + 1;
@@ -125,6 +196,8 @@ export default function RegistroDia() {
         numero: siguienteNumero,
         monto: 10,
         estado: "Pendiente" as Estado,
+        estado_pago: "Pendiente" as EstadoPago,
+        servicios: [],
         encargada: nombreEncargada || null,
       })
       .select()
@@ -151,21 +224,57 @@ export default function RegistroDia() {
       "Nombre completo": registro.nombre_completo ?? "",
       CI: registro.ci ?? "",
       Celular: registro.celular ?? "",
+      Servicios: registro.servicios?.join(", ") ?? "",
       "Monto (Bs)": registro.monto,
       Método: registro.metodo_pago ?? "",
-      Estado: registro.estado,
+      "Estado de pago": registro.estado_pago ?? (registro.estado === "Cancelado" ? "Pagado" : "Pendiente"),
       Equipo: registro.tipo_equipo ?? "",
       Observaciones: registro.observaciones ?? "",
     }));
     const hoja = XLSX.utils.json_to_sheet(filas, { header: COLUMNAS_EXCEL });
     hoja["!cols"] = [
       { wch: 12 }, { wch: 6 }, { wch: 28 }, { wch: 14 }, { wch: 16 },
-      { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 32 },
+      { wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 12 }, { wch: 32 },
     ];
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, "Registros");
     XLSX.writeFile(libro, `registros-${fecha}.xlsx`);
     setMensajeExcel(`${registros.length} registro(s) exportado(s).`);
+  }
+
+  function descargarPlantilla() {
+    const filas = [{
+      Fecha: fecha,
+      "N°": 1,
+      "Nombre completo": "Ejemplo Cliente",
+      CI: "1234567",
+      Celular: "70000000",
+      Servicios: "Mantenimiento, Formateo",
+      "Monto (Bs)": 20,
+      Método: "Efectivo",
+      "Estado de pago": "Pendiente",
+      Equipo: "Pc",
+      Observaciones: "",
+    }];
+    const hoja = XLSX.utils.json_to_sheet(filas, { header: COLUMNAS_EXCEL });
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Registros");
+    XLSX.writeFile(libro, "plantilla-registros.xlsx");
+  }
+
+  async function confirmarImportacion() {
+    if (!vistaPrevia) return;
+    setImportando(true);
+    const { data, error } = await supabase.from("registros").insert(vistaPrevia).select();
+    if (error) {
+      setMensajeExcel(`No se importó: ${error.message}`);
+    } else if (data) {
+      await cargarFechas();
+      await cargarRegistros(fecha);
+      setMensajeExcel(`${data.length} registro(s) importado(s) correctamente.`);
+      setVistaPrevia(null);
+    }
+    setImportando(false);
   }
 
   async function importarExcel(event: React.ChangeEvent<HTMLInputElement>) {
@@ -175,55 +284,63 @@ export default function RegistroDia() {
 
     setImportando(true);
     setMensajeExcel(null);
+    setVistaPrevia(null);
     try {
       const libro = XLSX.read(await archivo.arrayBuffer(), { type: "array" });
-      const hoja = libro.Sheets[libro.SheetNames[0]];
-      const datos = XLSX.utils.sheet_to_json<Record<string, unknown>>(hoja);
-      const registrosParaInsertar = datos.map((fila, indice) => {
-        const fechaFila = String(fila.Fecha ?? fecha).trim();
-        const monto = Number(fila["Monto (Bs)"] ?? 10);
-        const estado = String(fila.Estado ?? "Pendiente").trim();
-        const metodo = String(fila.Método ?? "").trim();
-        const equipo = String(fila.Equipo ?? "").trim();
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaFila)) {
-          throw new Error(`fila ${indice + 2}: fecha inválida`);
-        }
-        if (![10, 20, 30].includes(monto)) {
-          throw new Error(`fila ${indice + 2}: monto debe ser 10, 20 o 30`);
-        }
-        if (!["Pendiente", "Cancelado"].includes(estado)) {
-          throw new Error(`fila ${indice + 2}: estado inválido`);
-        }
-        if (metodo && !["Efectivo", "QR"].includes(metodo)) {
-          throw new Error(`fila ${indice + 2}: método inválido`);
-        }
-        if (equipo && !["Pc", "Laptop"].includes(equipo)) {
-          throw new Error(`fila ${indice + 2}: equipo inválido`);
-        }
+      const hoja = libro.SheetNames
+        .map((nombre) => libro.Sheets[nombre])
+        .sort((a, b) => XLSX.utils.decode_range(b["!ref"] ?? "A1").e.r - XLSX.utils.decode_range(a["!ref"] ?? "A1").e.r)[0];
+      const datos = XLSX.utils.sheet_to_json<Record<string, unknown>>(hoja, { defval: "" });
+      if (datos.length === 0) throw new Error("no se encontraron filas con datos en el archivo");
+      const registrosParaInsertar: RegistroInput[] = datos.map((fila, indice) => {
+        const fechaFila = fechaDeExcel(valorDeFila(fila, ["fecha", "dia"]), fecha);
+        const nombre = textoDeFila(valorDeFila(fila, ["nombrecompleto", "nombre", "nombrecliente", "nombredelcliente", "cliente"]));
+        const ci = textoDeFila(valorDeFila(fila, ["ci", "carnet", "carnetdeidentidad", "cedula", "documento"]));
+        const celular = textoDeFila(valorDeFila(fila, ["celular", "ndecelular", "numerodecelular", "telefonocelular", "telefono", "movil", "contacto"]));
+        const metodoTexto = textoDeFila(valorDeFila(fila, ["metodo", "metododepago", "metodopago", "formadepago", "pago"]));
+        const equipoTexto = textoDeFila(valorDeFila(fila, ["equipo", "tipodeequipo", "tipoequipo", "dispositivo"]));
+        const servicioTexto = textoDeFila(valorDeFila(fila, ["servicio", "servicios", "tiposervicio", "trabajo"]));
+        const servicios = servicioTexto.split(/[,;/+]|\s+y\s+/i).map((valor) => valor.trim()).filter(Boolean);
+        const serviciosNormalizados = servicios.map((valor) => {
+          const opcion = normalizarOpcion(valor);
+          if (opcion === "mantenimiento") return "Mantenimiento";
+          if (opcion === "formateo") return "Formateo";
+          if (opcion === "optimizacion") return "Optimizacion";
+          throw new Error(`fila ${indice + 2}: servicio inválido`);
+        }) as Servicio[];
+        const montoTexto = String(valorDeFila(fila, ["montobs", "monto", "importe", "precio"]) || "10")
+          .replace(/bs/gi, "")
+          .replace(/\s/g, "")
+          .replace(",", ".");
+        const montoExcel = Number(montoTexto);
+        const monto = serviciosNormalizados.length > 0 ? serviciosNormalizados.length * 10 : montoExcel;
+        const estadoTexto = normalizarOpcion(valorDeFila(fila, ["estadodepago", "pagodelservicio", "estadopago", "estado", "situacion"]));
+        const estadoPago: EstadoPago = estadoTexto === "pagado" || estadoTexto === "cancelado" ? "Pagado" : "Pendiente";
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaFila)) throw new Error(`fila ${indice + 2}: fecha inválida`);
+        if (![10, 20, 30].includes(monto)) throw new Error(`fila ${indice + 2}: monto debe ser 10, 20 o 30`);
+        if (metodoTexto && !["efectivo", "qr"].includes(normalizarOpcion(metodoTexto))) throw new Error(`fila ${indice + 2}: método inválido`);
+        if (equipoTexto && !["pc", "laptop"].includes(normalizarOpcion(equipoTexto))) throw new Error(`fila ${indice + 2}: equipo inválido`);
         return {
           fecha: fechaFila,
-          numero: Number(fila["N°"] ?? indice + 1) || indice + 1,
-          nombre_completo: String(fila["Nombre completo"] ?? "").trim() || null,
-          ci: String(fila.CI ?? "").trim() || null,
-          celular: String(fila.Celular ?? "").trim() || null,
+          numero: Number(valorDeFila(fila, ["n", "numero", "no"]) || indice + 1) || indice + 1,
+          nombre_completo: nombre || null,
+          ci: ci || null,
+          celular: celular || null,
           monto,
-          metodo_pago: (metodo || null) as MetodoPago | null,
-          estado: estado as Estado,
-          tipo_equipo: (equipo || null) as TipoEquipo | null,
-          observaciones: String(fila.Observaciones ?? "").trim() || null,
+          metodo_pago: (metodoTexto ? (normalizarOpcion(metodoTexto) === "qr" ? "QR" : "Efectivo") : null) as MetodoPago | null,
+          estado: estadoPago === "Pagado" ? "Cancelado" : "Pendiente",
+          servicios: serviciosNormalizados,
+          estado_pago: estadoPago,
+          tipo_equipo: (equipoTexto ? (normalizarOpcion(equipoTexto) === "laptop" ? "Laptop" : "Pc") : null) as TipoEquipo | null,
+          observaciones: textoDeFila(valorDeFila(fila, ["observaciones", "observacion", "comentarios", "comentario"])) || null,
           encargada: nombreEncargada || null,
         };
       });
       if (registrosParaInsertar.length === 0) throw new Error("el archivo está vacío");
-      const { data, error } = await supabase.from("registros").insert(registrosParaInsertar).select();
-      if (error) throw new Error(error.message);
-      if (data) {
-        await cargarFechas();
-        await cargarRegistros(fecha);
-        setMensajeExcel(`${data.length} registro(s) importado(s).`);
-      }
+      setVistaPrevia(registrosParaInsertar);
+      setMensajeExcel(`${registrosParaInsertar.length} fila(s) detectada(s). Revisa y confirma la importación.`);
     } catch (error) {
-      setMensajeExcel(error instanceof Error ? `No se importó: ${error.message}` : "No se pudo importar el archivo.");
+      setMensajeExcel(error instanceof Error ? `No se importó: ${error.message}` : "No se pudo leer el archivo.");
     } finally {
       setImportando(false);
     }
@@ -234,9 +351,10 @@ export default function RegistroDia() {
     "Nombre completo",
     "CI",
     "Celular",
+    "Servicios",
     "Monto (Bs)",
     "Método",
-    "Estado",
+    "Estado de pago",
     "Equipo",
     "Observaciones",
     "",
@@ -266,6 +384,12 @@ export default function RegistroDia() {
             <input type="file" accept=".xlsx,.xls" onChange={importarExcel} disabled={importando} className="sr-only" />
           </label>
           <button
+            onClick={descargarPlantilla}
+            className="rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm font-medium hover:bg-[var(--color-navy-50)]"
+          >
+            Descargar plantilla
+          </button>
+          <button
             onClick={exportarExcel}
             disabled={registros.length === 0}
             className="rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm font-medium hover:bg-[var(--color-navy-50)] disabled:cursor-not-allowed disabled:opacity-50"
@@ -279,6 +403,66 @@ export default function RegistroDia() {
         <p className="mb-4 rounded-lg bg-[var(--color-navy-50)] px-3 py-2 text-sm text-[var(--color-ink-soft)]">
           {mensajeExcel}
         </p>
+      )}
+
+      {vistaPrevia && (
+        <div className="mb-6 rounded-xl border border-[var(--color-navy-100)] bg-white p-4 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-base font-semibold">Vista previa de importación</h2>
+              <p className="text-xs text-[var(--color-ink-soft)]">
+                {vistaPrevia.length} fila(s) validadas. Confirma solo cuando los datos sean correctos.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setVistaPrevia(null)}
+                disabled={importando}
+                className="rounded-lg border border-[var(--color-line)] px-3 py-2 text-sm font-medium hover:bg-[var(--color-navy-50)]"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarImportacion}
+                disabled={importando}
+                className="rounded-lg bg-[var(--color-navy-800)] px-3 py-2 text-sm font-medium text-white hover:bg-[var(--color-navy-900)] disabled:opacity-50"
+              >
+                {importando ? "Guardando…" : "Confirmar importación"}
+              </button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-xs">
+              <thead>
+                <tr className="border-b border-[var(--color-line)] text-left text-[var(--color-ink-soft)]">
+                  <th className="px-2 py-2">Fila</th>
+                  <th className="px-2 py-2">Cliente</th>
+                  <th className="px-2 py-2">CI</th>
+                  <th className="px-2 py-2">Celular</th>
+                  <th className="px-2 py-2">Servicios</th>
+                  <th className="px-2 py-2">Monto</th>
+                  <th className="px-2 py-2">Pago</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vistaPrevia.slice(0, 10).map((registro, indice) => (
+                  <tr key={`${registro.numero}-${indice}`} className="border-b border-[var(--color-line)] last:border-0">
+                    <td className="px-2 py-2">{indice + 2}</td>
+                    <td className="px-2 py-2">{registro.nombre_completo || "(vacío)"}</td>
+                    <td className="px-2 py-2">{registro.ci || "(vacío)"}</td>
+                    <td className="px-2 py-2">{registro.celular || "(vacío)"}</td>
+                    <td className="px-2 py-2">{registro.servicios.join(", ") || "(vacío)"}</td>
+                    <td className="px-2 py-2 font-semibold">{registro.monto} Bs</td>
+                    <td className="px-2 py-2">{registro.estado_pago}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {vistaPrevia.length > 10 && (
+            <p className="mt-2 text-xs text-[var(--color-ink-soft)]">Mostrando las primeras 10 filas.</p>
+          )}
+        </div>
       )}
 
       {fechasConDatos.length > 1 && (
@@ -317,14 +501,14 @@ export default function RegistroDia() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
+                    <td colSpan={12} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
                     Cargando…
                   </td>
                 </tr>
               )}
               {!loading && registros.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
+                    <td colSpan={12} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
                     Todavía no hay registros para este día. Usa &ldquo;Agregar registro&rdquo;.
                   </td>
                 </tr>
@@ -358,26 +542,6 @@ export default function RegistroDia() {
                   </td>
                   <td className="px-2 py-1">
                     <select
-                      value={r.monto}
-                      onChange={(e) =>
-                        actualizarCampo(r.id, "monto", Number(e.target.value))
-                      }
-                      className="w-20 rounded-md border border-transparent hover:border-[var(--color-line)] focus:border-[var(--color-navy-700)] px-2 py-1 text-sm outline-none"
-                    >
-                      {!MONTOS_PERMITIDOS.includes(r.monto as 10 | 20 | 30) && (
-                        <option value={r.monto} disabled>
-                          Inválido
-                        </option>
-                      )}
-                      {MONTOS_PERMITIDOS.map((monto) => (
-                        <option key={monto} value={monto}>
-                          {monto}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-2 py-1">
-                    <select
                       value={r.metodo_pago ?? ""}
                       onChange={(e) =>
                         actualizarCampo(
@@ -394,19 +558,60 @@ export default function RegistroDia() {
                     </select>
                   </td>
                   <td className="px-2 py-1">
+                    <div className="w-48 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-2">
+                      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-ink-soft)]">
+                        Servicios (10 Bs c/u)
+                      </p>
+                      <div className="space-y-1">
+                        {SERVICIOS.map((servicio) => {
+                          const seleccionado = (r.servicios ?? []).includes(servicio);
+                          return (
+                            <label
+                              key={servicio}
+                              className={`flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-xs transition-colors ${
+                                seleccionado
+                                  ? "bg-[var(--color-navy-50)] text-[var(--color-navy-900)]"
+                                  : "text-[var(--color-ink-soft)] hover:bg-[var(--color-navy-50)]"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={seleccionado}
+                                onChange={() => {
+                                  const serviciosActuales = r.servicios ?? [];
+                                  const nuevosServicios = seleccionado
+                                    ? serviciosActuales.filter((item) => item !== servicio)
+                                    : [...serviciosActuales, servicio];
+                                  actualizarServicios(r.id, nuevosServicios);
+                                }}
+                                className="h-3.5 w-3.5 accent-[var(--color-navy-800)]"
+                              />
+                              <span>{servicio}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-2 py-1">
+                    <span className="inline-flex min-w-16 justify-center rounded-md bg-[var(--color-navy-50)] px-2 py-1 text-sm font-semibold text-[var(--color-navy-900)]">
+                      {r.monto} Bs
+                    </span>
+                  </td>
+                  <td className="px-2 py-1">
                     <select
-                      value={r.estado}
+                      value={r.estado_pago ?? (r.estado === "Cancelado" ? "Pagado" : "Pendiente")}
                       onChange={(e) =>
-                        actualizarCampo(r.id, "estado", e.target.value as Estado)
+                        actualizarPago(r.id, e.target.value as EstadoPago)
                       }
                       className={`rounded-md px-2 py-1 text-xs font-medium border-0 ${
-                        r.estado === "Cancelado"
+                        (r.estado_pago ?? (r.estado === "Cancelado" ? "Pagado" : "Pendiente")) === "Pagado"
                           ? "bg-[var(--color-ok-bg)] text-[var(--color-ok)]"
                           : "bg-[var(--color-pending-bg)] text-[var(--color-pending)]"
                       }`}
                     >
                       <option value="Pendiente">Pendiente</option>
-                      <option value="Cancelado">Cancelado</option>
+                      <option value="Pagado">Pagado</option>
                     </select>
                   </td>
                   <td className="px-2 py-1">

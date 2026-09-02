@@ -71,7 +71,8 @@ export default function InformeDashboard() {
         } as ResumenDia);
 
       actual.registros += 1;
-      if (r.estado === "Cancelado") {
+      const pagoRealizado = r.estado_pago ?? (r.estado === "Cancelado" ? "Pagado" : "Pendiente");
+      if (pagoRealizado === "Pagado") {
         actual.cancelados += 1;
         actual.totalCobrado += Number(r.monto) || 0;
       } else {
@@ -85,14 +86,18 @@ export default function InformeDashboard() {
   }, [todos]);
 
   const totales = useMemo(() => {
-    const cancelados = todos.filter((r) => r.estado === "Cancelado");
-    const efectivo = cancelados.filter((r) => r.metodo_pago === "Efectivo").length;
-    const qr = cancelados.filter((r) => r.metodo_pago === "QR").length;
-    const pendientes = todos.filter((r) => r.estado === "Pendiente").length;
-    const totalCobrado = cancelados.reduce((sum, r) => sum + (Number(r.monto) || 0), 0);
+    const pagados = todos.filter((r) =>
+      (r.estado_pago ?? (r.estado === "Cancelado" ? "Pagado" : "Pendiente")) === "Pagado"
+    );
+    const efectivo = pagados.filter((r) => r.metodo_pago === "Efectivo").length;
+    const qr = pagados.filter((r) => r.metodo_pago === "QR").length;
+    const pendientes = todos.filter((r) =>
+      (r.estado_pago ?? (r.estado === "Cancelado" ? "Pagado" : "Pendiente")) === "Pendiente"
+    ).length;
+    const totalCobrado = pagados.reduce((sum, r) => sum + (Number(r.monto) || 0), 0);
     return {
       registros: todos.length,
-      cancelados: cancelados.length,
+      cancelados: pagados.length,
       pendientes,
       efectivo,
       qr,
@@ -102,7 +107,7 @@ export default function InformeDashboard() {
 
   const tarjetas = [
     { label: "Total de registros", valor: totales.registros },
-    { label: "Cancelados", valor: totales.cancelados, tono: "ok" as const },
+    { label: "Pagados", valor: totales.cancelados, tono: "ok" as const },
     { label: "Pendientes", valor: totales.pendientes, tono: "pending" as const },
     { label: "Recaudado (Bs)", valor: totales.totalCobrado },
   ];
@@ -141,7 +146,7 @@ export default function InformeDashboard() {
 
       <div className="grid sm:grid-cols-2 gap-3 mb-8">
         <div className="bg-white rounded-xl border border-[var(--color-line)] px-4 py-4">
-          <p className="text-xs text-[var(--color-ink-soft)] mb-2">Método de pago (cancelados)</p>
+          <p className="text-xs text-[var(--color-ink-soft)] mb-2">Método de pago (pagados)</p>
           <div className="flex gap-6">
             <div>
               <p className="font-display text-xl font-semibold">{totales.efectivo}</p>
@@ -163,7 +168,7 @@ export default function InformeDashboard() {
                 <th className="text-left font-medium text-[var(--color-ink-soft)] px-3 py-2.5">Día</th>
                 <th className="text-left font-medium text-[var(--color-ink-soft)] px-3 py-2.5">Encargada</th>
                 <th className="text-left font-medium text-[var(--color-ink-soft)] px-3 py-2.5">Registros</th>
-                <th className="text-left font-medium text-[var(--color-ink-soft)] px-3 py-2.5">Cancelados</th>
+                <th className="text-left font-medium text-[var(--color-ink-soft)] px-3 py-2.5">Pagados</th>
                 <th className="text-left font-medium text-[var(--color-ink-soft)] px-3 py-2.5">Pendientes</th>
                 <th className="text-left font-medium text-[var(--color-ink-soft)] px-3 py-2.5">Total (Bs)</th>
               </tr>

@@ -9,9 +9,11 @@ create table if not exists public.registros (
   nombre_completo text,
   ci text,
   celular text,
-  monto numeric not null default 10 check (monto in (10, 20, 30,40, 50, 60, 70, 80, 90, 100)),
+  monto numeric not null default 10 check (monto in (10, 20, 30)),
   metodo_pago text check (metodo_pago in ('Efectivo', 'QR') or metodo_pago is null),
   estado text not null default 'Pendiente' check (estado in ('Pendiente', 'Cancelado')),
+  servicios text[] not null default '{}',
+  estado_pago text not null default 'Pendiente' check (estado_pago in ('Pendiente', 'Pagado')),
   observaciones text,
   tipo_equipo text check (tipo_equipo in ('Pc', 'Laptop') or tipo_equipo is null),
   encargada text,
@@ -22,6 +24,11 @@ create index if not exists registros_fecha_idx on public.registros (fecha);
 
 alter table public.registros enable row level security;
 
+drop policy if exists "Usuarios autenticados pueden leer registros" on public.registros;
+drop policy if exists "Usuarios autenticados pueden insertar registros" on public.registros;
+drop policy if exists "Usuarios autenticados pueden actualizar registros" on public.registros;
+drop policy if exists "Usuarios autenticados pueden borrar registros" on public.registros;
+
 create policy "Usuarios autenticados pueden leer registros"
   on public.registros for select to authenticated using (true);
 create policy "Usuarios autenticados pueden insertar registros"
@@ -31,7 +38,41 @@ create policy "Usuarios autenticados pueden actualizar registros"
 create policy "Usuarios autenticados pueden borrar registros"
   on public.registros for delete to authenticated using (true);
 
-alter publication supabase_realtime add table public.registros;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'registros'
+  ) then
+    alter publication supabase_realtime add table public.registros;
+  end if;
+end
+$$;
+
+-- Migración para una instalación que ya tiene creada la tabla registros.
+alter table public.registros add column if not exists servicio text;
+alter table public.registros add column if not exists servicios text[] not null default '{}';
+update public.registros
+set servicios = case when servicio is null or servicio = '' then '{}' else array[servicio] end
+where servicios = '{}';
+alter table public.registros drop constraint if exists registros_servicios_check;
+alter table public.registros add constraint registros_servicios_check
+  check (servicios <@ array['Mantenimiento', 'Formateo', 'Optimizacion']::text[]);
+alter table public.registros add column if not exists estado_pago text;
+update public.registros
+set estado_pago = case when estado = 'Cancelado' then 'Pagado' else 'Pendiente' end
+where estado_pago is null;
+alter table public.registros alter column estado_pago set default 'Pendiente';
+alter table public.registros alter column estado_pago set not null;
+alter table public.registros drop constraint if exists registros_servicio_check;
+alter table public.registros add constraint registros_servicio_check
+  check (servicio in ('Mantenimiento', 'Formateo', 'Optimizacion') or servicio is null);
+alter table public.registros drop constraint if exists registros_estado_pago_check;
+alter table public.registros add constraint registros_estado_pago_check
+  check (estado_pago in ('Pendiente', 'Pagado'));
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -40,6 +81,8 @@ create table if not exists public.profiles (
 );
 
 alter table public.profiles enable row level security;
+
+drop policy if exists "Usuarios autenticados pueden leer perfiles" on public.profiles;
 
 create policy "Usuarios autenticados pueden leer perfiles"
   on public.profiles for select to authenticated using (true);
