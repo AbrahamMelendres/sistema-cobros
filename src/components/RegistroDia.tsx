@@ -233,7 +233,6 @@ export default function RegistroDia() {
         equipos,
         cantidad_equipos: equipos.length,
         tipo_equipo: primerEquipo?.tipo_equipo ?? null,
-        servicios: primerEquipo?.servicios ?? [],
         monto,
       })
       .eq("id", id);
