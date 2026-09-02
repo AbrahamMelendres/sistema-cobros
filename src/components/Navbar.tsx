@@ -51,6 +51,9 @@ export default function Navbar({ nombre }: { nombre: string }) {
           <Link href="/informe" className={linkClass("/informe")}>
             Informe
           </Link>
+          <Link href="/sobre-nosotros" className={linkClass("/sobre-nosotros")}>
+            Nosotros
+          </Link>
         </nav>
 
         <div className="hidden sm:flex items-center gap-3 shrink-0">
