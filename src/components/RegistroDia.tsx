@@ -6,6 +6,7 @@ import type {
   Registro,
   Estado,
   EstadoPago,
+  EstadoEntrega,
   MetodoPago,
   Servicio,
   TipoEquipo,
@@ -16,8 +17,8 @@ import * as XLSX from "xlsx";
 
 const SERVICIOS: Servicio[] = ["Mantenimiento", "Formateo", "Optimizacion", "Otros"];
 const COLUMNAS_EXCEL = [
-  "Fecha", "N°", "Nombre completo", "CI", "Celular", "Cantidad de equipos", "Servicios", "Monto (Bs)",
-  "Método", "Estado de pago", "Observaciones",
+  "Fecha", "N°", "Nombre completo", "CI", "Celular", "Cantidad de equipos", "Servicios", "Método",
+  "Monto (Bs)", "Estado de pago", "Observaciones",
 ];
 
 function todayISO() {
@@ -94,6 +95,18 @@ function equiposDelRegistro(registro: Registro): EquipoRegistro[] {
 
 function calcularMontoEquipos(equipos: EquipoRegistro[]) {
   return equipos.reduce((total, equipo) => total + equipo.servicios.length * 10, 0) || 10;
+}
+
+function serviciosDeEquipos(equipos: EquipoRegistro[]): Servicio[] {
+  return Array.from(new Set(
+    equipos.flatMap((equipo) => equipo.servicios).filter((servicio) => servicio !== "Otros")
+  ));
+}
+
+function equiposTienenDetalleOtros(equipos: EquipoRegistro[]) {
+  return equipos.every((equipo) =>
+    !equipo.servicios.includes("Otros") || equipo.descripcion.trim().length > 0
+  );
 }
 
 export default function RegistroDia() {
@@ -194,13 +207,15 @@ export default function RegistroDia() {
     campo: keyof Registro,
     valor: string | number | string[] | null
   ) {
+    const registro = registros.find((item) => item.id === id);
+    const servicios = registro ? serviciosDeEquipos(equiposDelRegistro(registro)) : [];
     setRegistros((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, [campo]: valor } : r))
+      prev.map((r) => (r.id === id ? { ...r, [campo]: valor, servicios } : r))
     );
     setSavingId(id);
     const { error } = await supabase
       .from("registros")
-      .update({ [campo]: valor })
+      .update({ [campo]: valor, servicios })
       .eq("id", id);
     setSavingId(null);
     if (error) {
@@ -212,8 +227,13 @@ export default function RegistroDia() {
   async function actualizarEquipos(id: string, equipos: EquipoRegistro[]) {
     const registro = registros.find((item) => item.id === id);
     if (!registro) return;
+    if (!equiposTienenDetalleOtros(equipos)) {
+      setMensajeExcel("Completa el Detalle de Otros antes de guardar el equipo.");
+      return;
+    }
     const monto = calcularMontoEquipos(equipos);
     const primerEquipo = equipos[0];
+    const servicios = serviciosDeEquipos(equipos);
     setRegistros((prev) =>
       prev.map((r) => (r.id === id
         ? {
@@ -221,7 +241,7 @@ export default function RegistroDia() {
             equipos,
             cantidad_equipos: equipos.length,
             tipo_equipo: primerEquipo?.tipo_equipo ?? null,
-            servicios: primerEquipo?.servicios ?? [],
+            servicios,
             monto,
           }
         : r))
@@ -233,6 +253,7 @@ export default function RegistroDia() {
         equipos,
         cantidad_equipos: equipos.length,
         tipo_equipo: primerEquipo?.tipo_equipo ?? null,
+        servicios,
         monto,
       })
       .eq("id", id);
@@ -260,16 +281,30 @@ export default function RegistroDia() {
     const equipos = equiposDelRegistro(registro).map((equipo, equipoIndice) =>
       equipoIndice === indice ? { ...equipo, ...cambios } : equipo
     );
+    const puedeGuardar = equiposTienenDetalleOtros(equipos);
+    if (!puedeGuardar) {
+      setRegistros((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, equipos } : r))
+      );
+      setMensajeExcel("Completa el Detalle de Otros antes de guardar el equipo.");
+      return;
+    }
     await actualizarEquipos(id, equipos);
   }
 
   async function actualizarPago(id: string, estadoPago: EstadoPago) {
+    const registro = registros.find((item) => item.id === id);
+    if (estadoPago === "Pagado" && !registro?.metodo_pago) {
+      setMensajeExcel("Selecciona Efectivo o QR antes de marcar el pago como Pagado.");
+      return;
+    }
     const estado = estadoPago === "Pagado" ? "Cancelado" : "Pendiente";
+    const servicios = registro ? serviciosDeEquipos(equiposDelRegistro(registro)) : [];
     setRegistros((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, estado_pago: estadoPago, estado } : r))
+      prev.map((r) => (r.id === id ? { ...r, estado_pago: estadoPago, estado, servicios } : r))
     );
     setSavingId(id);
-    const { error } = await supabase.from("registros").update({ estado_pago: estadoPago, estado }).eq("id", id);
+    const { error } = await supabase.from("registros").update({ estado_pago: estadoPago, estado, servicios }).eq("id", id);
     setSavingId(null);
     if (error) {
       setMensajeExcel(`No se pudo actualizar el pago: ${error.message}`);
@@ -277,25 +312,59 @@ export default function RegistroDia() {
     }
   }
 
-  async function agregarFila() {
-    const siguienteNumero =
-      registros.reduce((max, r) => Math.max(max, r.numero ?? 0), 0) + 1;
-
-    const { data, error } = await supabase
+  async function actualizarEntrega(id: string, estadoEntrega: EstadoEntrega) {
+    const fechaEntrega = estadoEntrega === "Entregado" ? todayISO() : null;
+    setRegistros((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, estado_entrega: estadoEntrega, fecha_entrega: fechaEntrega } : r))
+    );
+    setSavingId(id);
+    const { error } = await supabase
       .from("registros")
-      .insert({
-        fecha,
-        numero: siguienteNumero,
-        cantidad_equipos: 1,
-        equipos: [{ tipo_equipo: null, servicios: [], descripcion: "" }],
-        monto: 10,
-        estado: "Pendiente" as Estado,
-        estado_pago: "Pendiente" as EstadoPago,
-        servicios: [],
-        encargada: nombreEncargada || null,
-      })
+      .update({ estado_entrega: estadoEntrega, fecha_entrega: fechaEntrega })
+      .eq("id", id);
+    setSavingId(null);
+    if (error) {
+      setMensajeExcel(`No se pudo actualizar la entrega: ${error.message}`);
+      await cargarRegistros(fecha);
+    }
+  }
+
+  async function agregarFila() {
+    const nuevoRegistro = {
+      fecha,
+      cantidad_equipos: 1,
+      equipos: [{ tipo_equipo: null, servicios: [], descripcion: "" }],
+      monto: 10,
+      estado: "Pendiente" as Estado,
+      estado_pago: "Pendiente" as EstadoPago,
+      estado_entrega: "Pendiente" as EstadoEntrega,
+      fecha_entrega: null,
+      servicios: [],
+      encargada: nombreEncargada || null,
+    };
+    let siguienteNumero =
+      registros.reduce((max, r) => Math.max(max, r.numero ?? 0), 0) + 1;
+    let { data, error } = await supabase
+      .from("registros")
+      .insert({ ...nuevoRegistro, numero: siguienteNumero })
       .select()
       .single();
+
+    const esDuplicadoNumeroPorFecha =
+      error?.code === "23505" && error.message.includes("unique_numero_por_fecha");
+    if (esDuplicadoNumeroPorFecha) {
+      const { data: registrosDelDia } = await supabase
+        .from("registros")
+        .select("numero")
+        .eq("fecha", fecha);
+      siguienteNumero =
+        (registrosDelDia ?? []).reduce((max, registro) => Math.max(max, registro.numero ?? 0), 0) + 1;
+      ({ data, error } = await supabase
+        .from("registros")
+        .insert({ ...nuevoRegistro, numero: siguienteNumero })
+        .select()
+        .single());
+    }
 
     if (error) {
       setMensajeExcel(`No se pudo agregar el registro: ${error.message}`);
@@ -331,8 +400,8 @@ export default function RegistroDia() {
         Celular: registro.celular ?? "",
         "Cantidad de equipos": equipos.length,
         Servicios: equipos.map((equipo, indice) => `Equipo ${indice + 1}: ${equipo.servicios.join(", ") || "Sin seleccionar"}`).join(" | "),
-        "Monto (Bs)": registro.monto,
         Método: registro.metodo_pago ?? "",
+        "Monto (Bs)": registro.monto,
         "Estado de pago": registro.estado_pago ?? (registro.estado === "Cancelado" ? "Pagado" : "Pendiente"),
         Observaciones: equipos.map((equipo, indice) => `Equipo ${indice + 1}: ${equipo.descripcion || "Sin descripción"}`).join(" | "),
       };
@@ -427,6 +496,7 @@ export default function RegistroDia() {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaFila)) throw new Error(`fila ${indice + 2}: fecha inválida`);
         if (!Number.isFinite(monto) || monto <= 0) throw new Error(`fila ${indice + 2}: monto inválido`);
         if (metodoTexto && !["efectivo", "qr"].includes(normalizarOpcion(metodoTexto))) throw new Error(`fila ${indice + 2}: método inválido`);
+        if (estadoPago === "Pagado" && !metodoTexto) throw new Error(`fila ${indice + 2}: se requiere método de pago para un registro Pagado`);
         if (equipoTexto && !["pc", "laptop"].includes(normalizarOpcion(equipoTexto))) throw new Error(`fila ${indice + 2}: equipo inválido`);
         return {
           fecha: fechaFila,
@@ -443,8 +513,10 @@ export default function RegistroDia() {
           monto,
           metodo_pago: (metodoTexto ? (normalizarOpcion(metodoTexto) === "qr" ? "QR" : "Efectivo") : null) as MetodoPago | null,
           estado: estadoPago === "Pagado" ? "Cancelado" : "Pendiente",
-          servicios: serviciosNormalizados,
+          servicios: serviciosNormalizados.filter((servicio) => servicio !== "Otros"),
           estado_pago: estadoPago,
+          estado_entrega: "Pendiente",
+          fecha_entrega: null,
           tipo_equipo: (equipoTexto ? (normalizarOpcion(equipoTexto) === "laptop" ? "Laptop" : "Pc") : null) as TipoEquipo | null,
           observaciones: textoDeFila(valorDeFila(fila, ["observaciones", "observacion", "comentarios", "comentario"])) || null,
           encargada: nombreEncargada || null,
@@ -467,9 +539,11 @@ export default function RegistroDia() {
     "Celular",
     "Cantidad",
     "Equipos y servicios",
-    "Monto (Bs)",
     "Método",
+    "Monto (Bs)",
     "Estado de pago",
+    "Estado de entrega",
+    "Fecha de entrega",
     "Observaciones",
     "",
   ];
@@ -643,21 +717,21 @@ export default function RegistroDia() {
             <tbody>
                 {loading && (
                 <tr>
-                  <td colSpan={11} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
+                  <td colSpan={13} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
                     Cargando…
                   </td>
                 </tr>
               )}
               {!loading && registros.length === 0 && (
                 <tr>
-                    <td colSpan={11} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
+                    <td colSpan={13} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
                     Todavía no hay registros para este día. Usa &ldquo;Agregar registro&rdquo;.
                   </td>
                 </tr>
               )}
               {!loading && registros.length > 0 && registrosFiltrados.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
+                  <td colSpan={13} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
                     No se encontraron registros con &ldquo;{busqueda}&rdquo;.
                   </td>
                 </tr>
@@ -701,7 +775,7 @@ export default function RegistroDia() {
                     />
                   </td>
                   <td className="px-2 py-1">
-                    <div className="grid grid-cols-1 min-[1200px]:grid-cols-2 gap-2 min-w-64">
+                    <div className="grid grid-cols-1 min-[1200px]:grid-cols-2 gap-2 min-w-[18rem]">
                       {equiposDelRegistro(r).map((equipo, indice) => (
                         <div key={indice} className="rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-2">
                           <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -727,7 +801,7 @@ export default function RegistroDia() {
                               return (
                                 <label
                                   key={servicio}
-                                  className={`flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1 py-1 text-xs transition-colors ${
+                                    className={`flex min-w-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-1 py-1 text-[11px] transition-colors ${
                                     seleccionado
                                       ? "bg-[var(--color-navy-50)] text-[var(--color-navy-900)]"
                                       : "text-[var(--color-ink-soft)] hover:bg-[var(--color-navy-50)]"
@@ -744,19 +818,22 @@ export default function RegistroDia() {
                                     }}
                                     className="h-3.5 w-3.5 shrink-0 accent-[var(--color-navy-800)]"
                                   />
-                                  <span className="min-w-0 break-words">{servicio}</span>
+                                  <span>{servicio === "Optimizacion" ? "Optimización" : servicio}</span>
                                 </label>
                               );
                             })}
                           </div>
-                          <input
-                            type="text"
-                            defaultValue={equipo.descripcion}
-                            onBlur={(e) => actualizarEquipo(r.id, indice, { descripcion: e.target.value })}
-                            placeholder="Descripción del equipo"
-                            aria-label={`Descripción del equipo ${indice + 1}`}
-                            className="mt-2 w-full rounded-md border border-[var(--color-line)] px-2 py-1.5 text-xs outline-none focus:border-[var(--color-navy-700)]"
-                          />
+                          {equipo.servicios.includes("Otros") && (
+                            <input
+                              type="text"
+                              defaultValue={equipo.descripcion}
+                              onBlur={(e) => actualizarEquipo(r.id, indice, { descripcion: e.target.value })}
+                              placeholder="Detalle de Otros"
+                              aria-label={`Detalle de Otros del equipo ${indice + 1}`}
+                              required
+                              className="mt-2 w-full rounded-md border border-[var(--color-line)] px-2 py-1.5 text-xs outline-none focus:border-[var(--color-navy-700)]"
+                            />
+                          )}
                         </div>
                       ))}
                     </div>
@@ -798,6 +875,24 @@ export default function RegistroDia() {
                       <option value="Pendiente">Pendiente</option>
                       <option value="Pagado">Pagado</option>
                     </select>
+                  </td>
+                  <td className="px-2 py-1">
+                    <select
+                      value={r.estado_entrega ?? "Pendiente"}
+                      onChange={(e) => actualizarEntrega(r.id, e.target.value as EstadoEntrega)}
+                      className={`rounded-md px-2 py-1 text-xs font-medium border-0 ${
+                        r.estado_entrega === "Entregado"
+                          ? "bg-[var(--color-ok-bg)] text-[var(--color-ok)]"
+                          : "bg-[var(--color-pending-bg)] text-[var(--color-pending)]"
+                      }`}
+                    >
+                      <option value="Pendiente">Pendiente</option>
+                      <option value="Entregado">Entregado</option>
+                      <option value="No recogido">No recogido</option>
+                    </select>
+                  </td>
+                  <td className="px-2 py-1 whitespace-nowrap text-xs text-[var(--color-ink-soft)]">
+                    {r.fecha_entrega ?? "—"}
                   </td>
                   <td className="px-2 py-1">
                     <input

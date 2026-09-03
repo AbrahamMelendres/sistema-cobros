@@ -3,6 +3,7 @@ export type Estado = "Pendiente" | "Cancelado";
 export type TipoEquipo = "Pc" | "Laptop";
 export type Servicio = "Mantenimiento" | "Formateo" | "Optimizacion" | "Otros";
 export type EstadoPago = "Pendiente" | "Pagado";
+export type EstadoEntrega = "Pendiente" | "Entregado" | "No recogido";
 
 export interface EquipoRegistro {
   tipo_equipo: TipoEquipo | null;
@@ -24,6 +25,8 @@ export interface Registro {
   estado: Estado;
   servicios: Servicio[];
   estado_pago: EstadoPago;
+  estado_entrega: EstadoEntrega;
+  fecha_entrega: string | null;
   observaciones: string | null;
   tipo_equipo: TipoEquipo | null;
   encargada: string | null;

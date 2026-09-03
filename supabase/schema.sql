@@ -16,6 +16,8 @@ create table if not exists public.registros (
   estado text not null default 'Pendiente' check (estado in ('Pendiente', 'Cancelado')),
   servicios text[] not null default '{}',
   estado_pago text not null default 'Pendiente' check (estado_pago in ('Pendiente', 'Pagado')),
+  estado_entrega text not null default 'Pendiente' check (estado_entrega in ('Pendiente', 'Entregado', 'No recogido')),
+  fecha_entrega date,
   observaciones text,
   tipo_equipo text check (tipo_equipo in ('Pc', 'Laptop') or tipo_equipo is null),
   encargada text,
@@ -71,6 +73,8 @@ alter table public.registros drop constraint if exists registros_servicios_check
 alter table public.registros add constraint registros_servicios_check
   check (servicios <@ array['Mantenimiento', 'Formateo', 'Optimizacion', 'Otros']::text[]);
 alter table public.registros add column if not exists estado_pago text;
+alter table public.registros add column if not exists estado_entrega text;
+alter table public.registros add column if not exists fecha_entrega date;
 update public.registros
 set estado_pago = case when estado = 'Cancelado' then 'Pagado' else 'Pendiente' end
 where estado_pago is null;
@@ -82,6 +86,14 @@ alter table public.registros add constraint registros_servicio_check
 alter table public.registros drop constraint if exists registros_estado_pago_check;
 alter table public.registros add constraint registros_estado_pago_check
   check (estado_pago in ('Pendiente', 'Pagado'));
+alter table public.registros alter column estado_entrega set default 'Pendiente';
+update public.registros
+set estado_entrega = 'Pendiente'
+where estado_entrega is null;
+alter table public.registros alter column estado_entrega set not null;
+alter table public.registros drop constraint if exists registros_estado_entrega_check;
+alter table public.registros add constraint registros_estado_entrega_check
+  check (estado_entrega in ('Pendiente', 'Entregado', 'No recogido'));
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
