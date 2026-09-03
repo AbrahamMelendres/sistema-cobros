@@ -14,6 +14,34 @@ function formatFecha(iso: string) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+function fechaLocalISO(fecha: Date) {
+  const year = fecha.getFullYear();
+  const month = String(fecha.getMonth() + 1).padStart(2, "0");
+  const day = String(fecha.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function rangoDelPeriodo(periodo: Periodo, fechaReferencia: string) {
+  const fecha = new Date(`${fechaReferencia}T00:00:00`);
+  let inicio = new Date(fecha);
+  let fin = new Date(fecha);
+
+  if (periodo === "semana") {
+    const dia = fecha.getDay();
+    const diferenciaLunes = dia === 0 ? -6 : 1 - dia;
+    inicio.setDate(fecha.getDate() + diferenciaLunes);
+    fin = new Date(inicio);
+    fin.setDate(inicio.getDate() + 6);
+  } else if (periodo === "mes") {
+    inicio = new Date(fecha.getFullYear(), fecha.getMonth(), 1);
+    fin = new Date(fecha.getFullYear(), fecha.getMonth() + 1, 0);
+  }
+
+  return { inicio: fechaLocalISO(inicio), fin: fechaLocalISO(fin) };
+}
+
+type Periodo = "dia" | "semana" | "mes";
+
 interface ResumenDia {
   fecha: string;
   encargada: string;
@@ -27,6 +55,8 @@ export default function InformeDashboard() {
   const supabase = useMemo(() => createClient(), []);
   const [todos, setTodos] = useState<Registro[]>([]);
   const [loading, setLoading] = useState(true);
+  const [periodo, setPeriodo] = useState<Periodo>("dia");
+  const [fechaReferencia, setFechaReferencia] = useState(() => fechaLocalISO(new Date()));
 
   async function cargar() {
     const { data } = await supabase
@@ -55,9 +85,14 @@ export default function InformeDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const registrosDelPeriodo = useMemo(() => {
+    const rango = rangoDelPeriodo(periodo, fechaReferencia);
+    return todos.filter((registro) => registro.fecha >= rango.inicio && registro.fecha <= rango.fin);
+  }, [fechaReferencia, periodo, todos]);
+
   const porDia: ResumenDia[] = useMemo(() => {
     const mapa = new Map<string, ResumenDia>();
-    for (const r of todos) {
+    for (const r of registrosDelPeriodo) {
       const key = r.fecha;
       const actual =
         mapa.get(key) ??
@@ -83,27 +118,27 @@ export default function InformeDashboard() {
       mapa.set(key, actual);
     }
     return Array.from(mapa.values()).sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
-  }, [todos]);
+  }, [registrosDelPeriodo]);
 
   const totales = useMemo(() => {
-    const pagados = todos.filter((r) =>
+    const pagados = registrosDelPeriodo.filter((r) =>
       (r.estado_pago ?? (r.estado === "Cancelado" ? "Pagado" : "Pendiente")) === "Pagado"
     );
     const efectivo = pagados.filter((r) => r.metodo_pago === "Efectivo").length;
     const qr = pagados.filter((r) => r.metodo_pago === "QR").length;
-    const pendientes = todos.filter((r) =>
+    const pendientes = registrosDelPeriodo.filter((r) =>
       (r.estado_pago ?? (r.estado === "Cancelado" ? "Pagado" : "Pendiente")) === "Pendiente"
     ).length;
     const totalCobrado = pagados.reduce((sum, r) => sum + (Number(r.monto) || 0), 0);
     return {
-      registros: todos.length,
+      registros: registrosDelPeriodo.length,
       cancelados: pagados.length,
       pendientes,
       efectivo,
       qr,
       totalCobrado,
     };
-  }, [todos]);
+  }, [registrosDelPeriodo]);
 
   const tarjetas = [
     { label: "Total de registros", valor: totales.registros },
@@ -113,13 +148,59 @@ export default function InformeDashboard() {
   ];
 
   return (
-    <div>
+    <div className="report-print-area">
       <div className="flex items-center justify-between mb-6">
         <h1 className="font-display text-2xl font-semibold">Informe general</h1>
-        <span className="flex items-center gap-1.5 text-xs text-[var(--color-ink-soft)]">
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="no-print rounded-lg bg-[var(--color-navy-800)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-navy-900)]"
+          >
+            Exportar PDF
+          </button>
+          <span className="no-print flex items-center gap-1.5 text-xs text-[var(--color-ink-soft)]">
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-ok)] animate-pulse" />
           En vivo
-        </span>
+          </span>
+        </div>
+      </div>
+
+      <div className="no-print mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-[var(--color-line)] bg-white p-3">
+        <div>
+          <span className="mb-1.5 block text-xs font-medium text-[var(--color-ink-soft)]">Período del informe</span>
+          <div className="flex rounded-lg border border-[var(--color-line)] p-0.5">
+            {(["dia", "semana", "mes"] as const).map((opcion) => (
+              <button
+                key={opcion}
+                type="button"
+                onClick={() => setPeriodo(opcion)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  periodo === opcion
+                    ? "bg-[var(--color-navy-800)] text-white"
+                    : "text-[var(--color-ink-soft)] hover:bg-[var(--color-navy-50)]"
+                }`}
+              >
+                {opcion === "dia" ? "Día" : opcion === "semana" ? "Semana" : "Mes"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="text-xs font-medium text-[var(--color-ink-soft)]">
+          Fecha de referencia
+          <input
+            type="date"
+            value={fechaReferencia}
+            onChange={(e) => setFechaReferencia(e.target.value)}
+            className="mt-1 block rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-sm font-normal text-[var(--color-ink)]"
+          />
+        </label>
+        <p className="pb-1 text-xs text-[var(--color-ink-soft)]">
+          {(() => {
+            const rango = rangoDelPeriodo(periodo, fechaReferencia);
+            return periodo === "dia" ? formatFecha(rango.inicio) : `${formatFecha(rango.inicio)} a ${formatFecha(rango.fin)}`;
+          })()}
+        </p>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">

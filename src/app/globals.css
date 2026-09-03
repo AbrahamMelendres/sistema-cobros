@@ -62,3 +62,27 @@ h1, h2, h3, .font-display {
 ::selection {
   background: var(--color-navy-100);
 }
+
+@media print {
+  @page {
+    margin: 1.2cm;
+  }
+
+  body {
+    background: white;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .report-print-area {
+    width: 100%;
+  }
+
+  .report-print-area .bg-white {
+    background: white;
+    border-color: #d1d5db;
+    box-shadow: none;
+  }
+}
