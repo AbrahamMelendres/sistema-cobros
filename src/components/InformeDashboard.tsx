@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 import { createClient } from "@/lib/supabase/client";
 import type { Registro } from "@/lib/types";
 
@@ -147,21 +149,79 @@ export default function InformeDashboard() {
     { label: "Recaudado (Bs)", valor: totales.totalCobrado },
   ];
 
+  async function exportarPdf() {
+    const element = document.getElementById("informe-pdf");
+    if (!element) return;
+
+    const canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+      logging: false,
+    });
+
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF("l", "pt", "a4");
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 24;
+    const imgWidth = pageWidth - margin * 2;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    pdf.addImage(imgData, "PNG", margin, margin, imgWidth, imgHeight, undefined, "FAST");
+
+    if (imgHeight > pageHeight - margin * 2) {
+      const adjustedHeight = pageHeight - margin * 2;
+      const adjustedWidth = (canvas.width * adjustedHeight) / canvas.height;
+      pdf.deletePage(1);
+      pdf.addImage(imgData, "PNG", margin, margin, adjustedWidth, adjustedHeight, undefined, "FAST");
+    }
+
+    pdf.save(`informe-general-${periodo}.pdf`);
+  }
+
+  const tituloPeriodo = (() => {
+    const rango = rangoDelPeriodo(periodo, fechaReferencia);
+    return periodo === "dia"
+      ? `Día ${formatFecha(rango.inicio)}`
+      : periodo === "semana"
+      ? `Semana ${formatFecha(rango.inicio)} - ${formatFecha(rango.fin)}`
+      : `Mes ${formatFecha(rango.inicio)} - ${formatFecha(rango.fin)}`;
+  })();
+
   return (
-    <div className="report-print-area">
+    <div id="informe-pdf" className="report-print-area">
+      <div className="mb-6 rounded-xl border border-[var(--color-line)] bg-white px-5 py-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-navy-800)] text-sm font-semibold text-white">
+              RC
+            </div>
+            <div>
+              <p className="font-display text-base font-semibold text-[var(--color-ink)]">Registro de Cobros</p>
+              <p className="text-xs text-[var(--color-ink-soft)]">Academia Técnica de Ingeniería y Tecnologías Informáticas</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-xs uppercase tracking-[0.12em] text-[var(--color-ink-soft)]">Informe</p>
+            <p className="font-display text-lg font-semibold text-[var(--color-ink)]">{tituloPeriodo}</p>
+          </div>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between mb-6">
         <h1 className="font-display text-2xl font-semibold">Informe general</h1>
         <div className="flex items-center gap-4">
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={exportarPdf}
             className="no-print rounded-lg bg-[var(--color-navy-800)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-navy-900)]"
           >
-            Exportar PDF
+            Generar PDF
           </button>
           <span className="no-print flex items-center gap-1.5 text-xs text-[var(--color-ink-soft)]">
-          <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-ok)] animate-pulse" />
-          En vivo
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-ok)] animate-pulse" />
+            En vivo
           </span>
         </div>
       </div>
@@ -198,7 +258,9 @@ export default function InformeDashboard() {
         <p className="pb-1 text-xs text-[var(--color-ink-soft)]">
           {(() => {
             const rango = rangoDelPeriodo(periodo, fechaReferencia);
-            return periodo === "dia" ? formatFecha(rango.inicio) : `${formatFecha(rango.inicio)} a ${formatFecha(rango.fin)}`;
+            return periodo === "dia"
+              ? formatFecha(rango.inicio)
+              : `${formatFecha(rango.inicio)} a ${formatFecha(rango.fin)}`;
           })()}
         </p>
       </div>

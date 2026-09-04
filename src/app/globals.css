@@ -65,19 +65,30 @@ h1, h2, h3, .font-display {
 
 @media print {
   @page {
-    margin: 1.2cm;
+    margin: 0.8cm;
   }
 
   body {
     background: white;
+    margin: 0;
   }
 
+  header,
+  nav,
   .no-print {
     display: none !important;
   }
 
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
   .report-print-area {
     width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
   }
 
   .report-print-area .bg-white {
