@@ -65,7 +65,8 @@ h1, h2, h3, .font-display {
 
 @media print {
   @page {
-    margin: 0.8cm;
+    size: landscape;
+    margin: 0.7cm;
   }
 
   body {
@@ -95,5 +96,15 @@ h1, h2, h3, .font-display {
     background: white;
     border-color: #d1d5db;
     box-shadow: none;
+  }
+
+  .report-print-area table {
+    font-size: 11px;
+  }
+
+  .report-print-area th,
+  .report-print-area td {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
   }
 }

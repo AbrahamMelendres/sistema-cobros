@@ -189,12 +189,18 @@ export default function InformeDashboard() {
       : `Mes ${formatFecha(rango.inicio)} - ${formatFecha(rango.fin)}`;
   })();
 
+  const fechaEmision = new Date().toLocaleDateString("es-BO", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+
   return (
     <div id="informe-pdf" className="report-print-area">
-      <div className="mb-6 rounded-xl border border-[var(--color-line)] bg-white px-5 py-4">
+      <div className="mb-6 rounded-xl border border-[var(--color-line)] bg-white px-5 py-4 shadow-sm">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-navy-800)] text-sm font-semibold text-white">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--color-navy-800)] text-sm font-semibold text-white">
               RC
             </div>
             <div>
@@ -203,13 +209,13 @@ export default function InformeDashboard() {
             </div>
           </div>
           <div className="text-right">
-            <p className="text-xs uppercase tracking-[0.12em] text-[var(--color-ink-soft)]">Informe</p>
+            <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-ink-soft)]">Informe</p>
             <p className="font-display text-lg font-semibold text-[var(--color-ink)]">{tituloPeriodo}</p>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-semibold">Informe general</h1>
         <div className="flex items-center gap-4">
           <button
@@ -343,6 +349,17 @@ export default function InformeDashboard() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className="mt-6 flex items-center justify-between rounded-xl border border-[var(--color-line)] bg-[var(--color-navy-50)] px-4 py-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.12em] text-[var(--color-ink-soft)]">Fecha de emisión</p>
+          <p className="font-medium text-[var(--color-ink)]">{fechaEmision}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs uppercase tracking-[0.12em] text-[var(--color-ink-soft)]">Total general</p>
+          <p className="font-display text-xl font-semibold text-[var(--color-ink)]">Bs {totales.totalCobrado}</p>
         </div>
       </div>
     </div>
