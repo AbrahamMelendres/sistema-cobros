@@ -3,11 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 export default function Navbar({ nombre }: { nombre: string }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [cajaAbierta, setCajaAbierta] = useState(false);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -48,6 +50,45 @@ export default function Navbar({ nombre }: { nombre: string }) {
           <Link href="/dia" className={linkClass("/dia")}>
             Día
           </Link>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setCajaAbierta((abierta) => !abierta)}
+              aria-haspopup="menu"
+              aria-expanded={cajaAbierta}
+              className={linkClass("/caja")}
+            >
+              Caja <span className="ml-1 text-xs">▾</span>
+            </button>
+            {cajaAbierta && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full z-20 mt-2 w-44 rounded-lg border border-[var(--color-line)] bg-white p-1 shadow-lg"
+              >
+                {[
+                  ["Inicio", "/caja"],
+                  ["Movimientos", "/caja/movimientos"],
+                  ["Custodia", "/caja/custodia"],
+                  ["Pendientes", "/caja/pendientes"],
+                  ["Informes", "/caja/informes"],
+                ].map(([label, href]) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    role="menuitem"
+                    onClick={() => setCajaAbierta(false)}
+                    className={`block rounded-md px-3 py-2 text-sm transition-colors ${
+                      pathname === href
+                        ? "bg-[var(--color-navy-800)] text-white"
+                        : "text-[var(--color-ink-soft)] hover:bg-[var(--color-navy-100)]"
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
           <Link href="/informe" className={linkClass("/informe")}>
             Informe
           </Link>
