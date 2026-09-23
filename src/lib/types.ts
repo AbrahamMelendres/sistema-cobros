@@ -34,3 +34,16 @@ export interface Registro {
 }
 
 export type RegistroInput = Omit<Registro, "id" | "created_at">;
+
+export interface ResumenCaja {
+  total_ingresos: number;
+  total_egresos: number;
+  pendientes_por_pagar: number;
+  saldo_actual: number;
+  saldo_neto_despues_pendientes: number;
+}
+
+export interface ResumenResponsable {
+  responsable: string;
+  monto: number;
+}
