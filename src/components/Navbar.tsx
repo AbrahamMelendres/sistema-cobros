@@ -3,13 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 export default function Navbar({ nombre }: { nombre: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const [cajaAbierta, setCajaAbierta] = useState(false);
+  const [esAdministrador, setEsAdministrador] = useState(false);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -17,6 +18,19 @@ export default function Navbar({ nombre }: { nombre: string }) {
     router.push("/login");
     router.refresh();
   }
+
+  useEffect(() => {
+    async function verificarRol() {
+      const supabase = createClient();
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) return;
+
+      const { data } = await supabase.rpc("es_administrador");
+      setEsAdministrador(data === true);
+    }
+
+    verificarRol();
+  }, []);
 
   const linkClass = (href: string) =>
     `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
@@ -71,6 +85,7 @@ export default function Navbar({ nombre }: { nombre: string }) {
                   ["Custodia", "/caja/custodia"],
                   ["Pendientes", "/caja/pendientes"],
                   ["Informes", "/caja/informes"],
+                  ...(esAdministrador ? [["Usuarios", "/caja/usuarios"]] : []),
                 ].map(([label, href]) => (
                   <Link
                     key={href}
