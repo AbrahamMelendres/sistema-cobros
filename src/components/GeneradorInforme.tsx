@@ -77,18 +77,6 @@ function moneda(valor: number) {
   return `${Number(valor || 0).toFixed(2)} Bs`;
 }
 
-function filasExcel(filas: FilaInforme[]) {
-  return filas.map((fila) => ({
-    Fecha: fila.fecha,
-    Actividad: fila.actividad,
-    Tipo: fila.tipo,
-    Concepto: fila.concepto,
-    Monto: fila.monto,
-    Método: fila.metodo,
-    Responsable: fila.responsable,
-  }));
-}
-
 function tablaWord(encabezados: string[], filas: string[][]) {
   return new Table({
     rows: [
@@ -141,36 +129,63 @@ export default function GeneradorInforme({
     });
     const pdf = new jsPDF("l", "pt", "a4");
     const margin = 24;
-    const headerHeight = periodoAnual ? 34 : 0;
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const imageWidth = pageWidth - margin * 2;
-    const imageHeight = (canvas.height * imageWidth) / canvas.width;
-    const height = Math.min(imageHeight, pageHeight - margin * 2 - headerHeight);
-    const width = (canvas.width * height) / canvas.height;
-    if (periodoAnual) {
-      pdf.text(titulo, margin, margin + 12);
-      pdf.text(`Periodo: ${periodo}`, margin, margin + 27);
+    const anchoDisponible = pageWidth - margin * 2;
+    const altoDisponible = pageHeight - margin * 2;
+    const escala = anchoDisponible / canvas.width;
+    const altoTramo = Math.floor(altoDisponible / escala);
+
+    for (let y = 0; y < canvas.height; y += altoTramo) {
+      if (y > 0) pdf.addPage();
+      const altoRecorte = Math.min(altoTramo, canvas.height - y);
+      const recorte = document.createElement("canvas");
+      recorte.width = canvas.width;
+      recorte.height = altoRecorte;
+      const contexto = recorte.getContext("2d");
+      if (!contexto) return;
+      contexto.drawImage(canvas, 0, y, canvas.width, altoRecorte, 0, 0, recorte.width, recorte.height);
+      pdf.addImage(recorte.toDataURL("image/png"), "PNG", margin, margin, anchoDisponible, altoRecorte * escala, undefined, "FAST");
     }
-    pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin + headerHeight, width, height, undefined, "FAST");
     pdf.save(`${nombreBase}.pdf`);
   }
 
   function exportarExcel() {
-    const filas = filasExcel([...ingresos, ...egresos]);
-    const hoja = periodoAnual
-      ? XLSX.utils.aoa_to_sheet([
-          [titulo],
-          [`Periodo: ${periodo}`],
-          [],
-          ["Fecha", "Actividad", "Tipo", "Concepto", "Monto", "Método", "Responsable"],
-          ...filas.map((fila) => [fila.Fecha, fila.Actividad, fila.Tipo, fila.Concepto, fila.Monto, fila.Método, fila.Responsable]),
-        ])
-      : XLSX.utils.json_to_sheet(filas, {
-          header: ["Fecha", "Actividad", "Tipo", "Concepto", "Monto", "Método", "Responsable"],
-        });
+    const encabezadosMovimientos = ["Fecha", "Actividad", "Concepto", "Monto", "Método", "Responsable"];
+    const filaMovimiento = (fila: FilaInforme) => [fila.fecha, fila.actividad, fila.concepto, fila.monto, fila.metodo, fila.responsable];
+    const filas = [
+      [titulo],
+      [`Responsable de control: ${responsableControl || "____________________________"}`],
+      [`Periodo: ${periodo}`],
+      [],
+      ["Tabla de ingresos"],
+      encabezadosMovimientos,
+      ...ingresos.map(filaMovimiento),
+      [],
+      ["Tabla de egresos"],
+      encabezadosMovimientos,
+      ...egresos.map(filaMovimiento),
+      [],
+      ["Resumen de caja"],
+      ["Fondos anteriores", fondosAnteriores],
+      ["Total administrado", totalAdministrado],
+      ["Saldo de caja", saldoCalculado],
+      ["Pendientes", pendientesTotal],
+      ["Detalle de pendientes"],
+      ["Descripción", "Monto", "Actividad", "Responsable", "Estado"],
+      ...pendientes.map((pendiente) => [pendiente.descripcion, pendiente.monto, pendiente.actividad, pendiente.responsable, pendiente.estado]),
+      [],
+      ["Saldo neto", saldoNetoCalculado],
+      [],
+      ["Detalle por actividad"],
+      ["Actividad", "Ingresos", "Egresos", "Neto"],
+      ...detalleActividad.map((detalle) => [detalle.actividad, detalle.ingresos, detalle.egresos, detalle.ingresos - detalle.egresos]),
+      [],
+      ["Firma del responsable", "____________________________"],
+    ];
+    const hoja = XLSX.utils.aoa_to_sheet(filas);
     const libro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(libro, hoja, "Movimientos");
+    XLSX.utils.book_append_sheet(libro, hoja, "Informe");
     XLSX.writeFile(libro, `${nombreBase}.xlsx`);
   }
 
@@ -196,11 +211,11 @@ export default function GeneradorInforme({
           new Paragraph(`Total administrado: ${moneda(totalAdministrado)}`),
           new Paragraph(`Saldo de caja: ${moneda(saldoCalculado)}`),
           new Paragraph(`Pendientes: ${moneda(pendientesTotal)}`),
+          new Paragraph({ text: "Detalle de pendientes", heading: HeadingLevel.HEADING_2 }),
+          tablaWord(["Descripción", "Monto", "Actividad", "Responsable", "Estado"], pendientesFilas),
           new Paragraph(`Saldo neto: ${moneda(saldoNetoCalculado)}`),
           new Paragraph({ text: "Detalle por actividad", heading: HeadingLevel.HEADING_2 }),
           tablaWord(["Actividad", "Ingresos", "Egresos", "Neto"], actividadFilas),
-          new Paragraph({ text: "Pendientes", heading: HeadingLevel.HEADING_2 }),
-          tablaWord(["Descripción", "Monto", "Actividad", "Responsable", "Estado"], pendientesFilas),
           new Paragraph("\n\nFirma del responsable: ________________________________________________"),
         ],
       }],
@@ -215,7 +230,8 @@ export default function GeneradorInforme({
   }
 
   return (
-    <div ref={contenedorRef} className="rounded-lg border border-[var(--color-line)] bg-white p-3">
+    <>
+    <div className="rounded-lg border border-[var(--color-line)] bg-white p-3">
       <div className="no-print relative">
         <button
           type="button"
@@ -255,11 +271,39 @@ export default function GeneradorInforme({
           </div>
         )}
       </div>
-      <div className="sr-only" aria-hidden="true">
-        <h2>{titulo}</h2>
-        <p>{periodo}</p>
-        <p>Total administrado: {moneda(totalAdministrado)}</p>
-      </div>
     </div>
+    <div ref={contenedorRef} className="fixed left-[-12000px] top-0 w-[1100px] bg-white p-8 text-black" aria-hidden="true">
+      <h1 className="mb-2 text-2xl font-bold">{titulo}</h1>
+      <p>Responsable de control: {responsableControl || "____________________________"}</p>
+      <p className="mb-6">Periodo: {periodo}</p>
+      <h2 className="mb-2 text-lg font-bold">Tabla de ingresos</h2>
+      <table className="mb-6 w-full border-collapse text-sm">
+        <thead><tr>{["Fecha", "Actividad", "Concepto", "Monto", "Responsable"].map((texto) => <th key={texto} className="border p-2 text-left">{texto}</th>)}</tr></thead>
+        <tbody>{ingresos.map((fila, indice) => <tr key={`${fila.fecha}-${indice}`}><td className="border p-2">{fila.fecha}</td><td className="border p-2">{fila.actividad}</td><td className="border p-2">{fila.concepto}</td><td className="border p-2">{moneda(fila.monto)}</td><td className="border p-2">{fila.responsable}</td></tr>)}</tbody>
+      </table>
+      <h2 className="mb-2 text-lg font-bold">Tabla de egresos</h2>
+      <table className="mb-6 w-full border-collapse text-sm">
+        <thead><tr>{["Fecha", "Actividad", "Concepto", "Monto", "Responsable"].map((texto) => <th key={texto} className="border p-2 text-left">{texto}</th>)}</tr></thead>
+        <tbody>{egresos.map((fila, indice) => <tr key={`${fila.fecha}-${indice}`}><td className="border p-2">{fila.fecha}</td><td className="border p-2">{fila.actividad}</td><td className="border p-2">{fila.concepto}</td><td className="border p-2">{moneda(fila.monto)}</td><td className="border p-2">{fila.responsable}</td></tr>)}</tbody>
+      </table>
+      <h2 className="mb-2 text-lg font-bold">Resumen de caja</h2>
+      <p>Fondos anteriores: {moneda(fondosAnteriores)}</p>
+      <p>Total administrado: {moneda(totalAdministrado)}</p>
+      <p>Saldo de caja: {moneda(saldoCalculado)}</p>
+      <p>Pendientes: {moneda(pendientesTotal)}</p>
+      <h2 className="mb-2 text-lg font-bold">Detalle de pendientes</h2>
+      <table className="mb-6 w-full border-collapse text-sm">
+        <thead><tr>{["Descripción", "Monto", "Actividad", "Responsable", "Estado"].map((texto) => <th key={texto} className="border p-2 text-left">{texto}</th>)}</tr></thead>
+        <tbody>{pendientes.map((pendiente, indice) => <tr key={`${pendiente.descripcion}-${indice}`}><td className="border p-2">{pendiente.descripcion}</td><td className="border p-2">{moneda(pendiente.monto)}</td><td className="border p-2">{pendiente.actividad}</td><td className="border p-2">{pendiente.responsable}</td><td className="border p-2">{pendiente.estado}</td></tr>)}</tbody>
+      </table>
+      <p className="mb-6">Saldo neto: {moneda(saldoNetoCalculado)}</p>
+      <h2 className="mb-2 text-lg font-bold">Detalle por actividad</h2>
+      <table className="mb-6 w-full border-collapse text-sm">
+        <thead><tr>{["Actividad", "Ingresos", "Egresos", "Neto"].map((texto) => <th key={texto} className="border p-2 text-left">{texto}</th>)}</tr></thead>
+        <tbody>{detalleActividad.map((detalle, indice) => <tr key={`${detalle.actividad}-${indice}`}><td className="border p-2">{detalle.actividad}</td><td className="border p-2">{moneda(detalle.ingresos)}</td><td className="border p-2">{moneda(detalle.egresos)}</td><td className="border p-2">{moneda(detalle.ingresos - detalle.egresos)}</td></tr>)}</tbody>
+      </table>
+      <p className="mt-8">Firma del responsable: ________________________________________________</p>
+      </div>
+    </>
   );
 }

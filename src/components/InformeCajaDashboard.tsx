@@ -115,6 +115,7 @@ export default function InformeCajaDashboard() {
   const [resumenActividades, setResumenActividades] = useState<ResumenActividad[]>([]);
   const [resumenResponsables, setResumenResponsables] = useState<ResumenResponsable[]>([]);
   const [pendientes, setPendientes] = useState<Pendiente[]>([]);
+  const [fondosAnteriores, setFondosAnteriores] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [periodo, setPeriodo] = useState<Periodo>("dia");
@@ -143,6 +144,26 @@ export default function InformeCajaDashboard() {
       .select("descripcion, monto, estado, fecha_registro, actividad:actividades(nombre), responsable:responsables(nombre)")
       .gte("fecha_registro", rango.inicio)
       .lte("fecha_registro", rango.fin);
+    const cargarMovimientosAnteriores = async () => {
+      const anteriores: Pick<Movimiento, "tipo" | "monto">[] = [];
+      const tamanoPagina = 1000;
+
+      for (let desde = 0; ; desde += tamanoPagina) {
+        let query = supabase
+          .from("movimientos")
+          .select("tipo, monto")
+          .lt("fecha", rango.inicio);
+        if (actividadId) query = query.eq("actividad_id", actividadId);
+        if (responsableId) query = query.eq("responsable_id", responsableId);
+
+        const { data, error } = await query.order("id").range(desde, desde + tamanoPagina - 1);
+        if (error) return { data: null, error };
+
+        const pagina = (data ?? []) as Pick<Movimiento, "tipo" | "monto">[];
+        anteriores.push(...pagina);
+        if (pagina.length < tamanoPagina) return { data: anteriores, error: null };
+      }
+    };
 
     if (actividadId) {
       movimientosQuery = movimientosQuery.eq("actividad_id", actividadId);
@@ -153,9 +174,10 @@ export default function InformeCajaDashboard() {
       pendientesQuery = pendientesQuery.eq("responsable_id", responsableId);
     }
 
-    const [movimientosResult, pendientesResult, catalogosResult] = await Promise.all([
+    const [movimientosResult, pendientesResult, movimientosAnterioresResult, catalogosResult] = await Promise.all([
       movimientosQuery,
       pendientesQuery,
+      cargarMovimientosAnteriores(),
       Promise.all([
         supabase.from("actividades").select("id, nombre").eq("activa", true).order("nombre"),
         supabase.from("responsables").select("id, nombre").eq("activo", true).order("nombre"),
@@ -163,7 +185,7 @@ export default function InformeCajaDashboard() {
     ]);
 
     const catalogoError = catalogosResult[0].error ?? catalogosResult[1].error;
-  const primerError = movimientosResult.error ?? pendientesResult.error ?? catalogoError;
+    const primerError = movimientosResult.error ?? pendientesResult.error ?? movimientosAnterioresResult.error ?? catalogoError;
     if (primerError) {
       setError(`No se pudo cargar el informe de caja: ${primerError.message}`);
       setLoading(false);
@@ -171,6 +193,10 @@ export default function InformeCajaDashboard() {
     }
 
     const movimientosFiltrados = (movimientosResult.data ?? []) as Movimiento[];
+    const fondosAnterioresCalculados = (movimientosAnterioresResult.data ?? []).reduce(
+      (total, movimiento) => total + (movimiento.tipo === "Ingreso" ? 1 : -1) * (Number(movimiento.monto) || 0),
+      0,
+    );
     const actividadesAgrupadas = new Map<string, ResumenActividad>();
     const responsablesAgrupados = new Map<string, ResumenResponsable>();
     for (const movimiento of movimientosFiltrados) {
@@ -203,6 +229,7 @@ export default function InformeCajaDashboard() {
     }
 
     setMovimientos(movimientosFiltrados);
+    setFondosAnteriores(fondosAnterioresCalculados);
     setResumenActividades(Array.from(actividadesAgrupadas.values()));
     setResumenResponsables(Array.from(responsablesAgrupados.values()));
     setPendientes((pendientesResult.data ?? []) as Pendiente[]);
@@ -313,9 +340,7 @@ export default function InformeCajaDashboard() {
     egresos: egresosInforme,
     pendientes: pendientesInforme,
     detalleActividad: detalleActividadInforme,
-    // TODO: Calcular fondos anteriores con los registros previos al inicio del período.
-    saldoCaja: totales.neto,
-    saldoNeto: totales.neto - pendientesInforme.reduce((total, pendiente) => total + pendiente.monto, 0),
+    fondosAnteriores,
   };
 
   return (

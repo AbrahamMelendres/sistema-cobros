@@ -85,7 +85,7 @@ export default function Navbar({ nombre }: { nombre: string }) {
                   ["Custodia", "/caja/custodia"],
                   ["Pendientes", "/caja/pendientes"],
                   ["Informes", "/caja/informes"],
-                  ...(esAdministrador ? [["Usuarios", "/caja/usuarios"]] : []),
+                  ...(esAdministrador ? [["Usuarios", "/caja/usuarios"], ["Catálogos", "/caja/catalogos"]] : []),
                 ].map(([label, href]) => (
                   <Link
                     key={href}

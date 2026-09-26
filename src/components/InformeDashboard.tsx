@@ -168,13 +168,14 @@ export default function InformeDashboard() {
     const imgWidth = pageWidth - margin * 2;
     const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-    pdf.addImage(imgData, "PNG", margin, margin, imgWidth, imgHeight, undefined, "FAST");
-
     if (imgHeight > pageHeight - margin * 2) {
       const adjustedHeight = pageHeight - margin * 2;
       const adjustedWidth = (canvas.width * adjustedHeight) / canvas.height;
-      pdf.deletePage(1);
+      pdf.addPage();
       pdf.addImage(imgData, "PNG", margin, margin, adjustedWidth, adjustedHeight, undefined, "FAST");
+      pdf.deletePage(1);
+    } else {
+      pdf.addImage(imgData, "PNG", margin, margin, imgWidth, imgHeight, undefined, "FAST");
     }
 
     pdf.save(`informe-general-${periodo}.pdf`);
