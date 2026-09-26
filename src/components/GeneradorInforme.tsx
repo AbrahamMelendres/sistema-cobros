@@ -122,7 +122,8 @@ export default function GeneradorInforme({
 }: GeneradorInformeProps) {
   const contenedorRef = useRef<HTMLDivElement>(null);
   const [menuAbierto, setMenuAbierto] = useState(false);
-  const nombreBase = `informe-caja-${nombreArchivo(tipo)}-${nombreArchivo(periodo)}`;
+  const periodoAnual = /^Año\s+(\d{4})$/.exec(periodo);
+  const nombreBase = `informe-caja-${nombreArchivo(tipo)}-${periodoAnual ? `anual-${periodoAnual[1]}` : nombreArchivo(periodo)}`;
   const totalIngresos = ingresos.reduce((total, fila) => total + Number(fila.monto || 0), 0);
   const totalEgresos = egresos.reduce((total, fila) => total + Number(fila.monto || 0), 0);
   const totalAdministrado = fondosAnteriores + totalIngresos;
@@ -140,20 +141,34 @@ export default function GeneradorInforme({
     });
     const pdf = new jsPDF("l", "pt", "a4");
     const margin = 24;
+    const headerHeight = periodoAnual ? 34 : 0;
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     const imageWidth = pageWidth - margin * 2;
     const imageHeight = (canvas.height * imageWidth) / canvas.width;
-    const height = Math.min(imageHeight, pageHeight - margin * 2);
+    const height = Math.min(imageHeight, pageHeight - margin * 2 - headerHeight);
     const width = (canvas.width * height) / canvas.height;
-    pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin, width, height, undefined, "FAST");
+    if (periodoAnual) {
+      pdf.text(titulo, margin, margin + 12);
+      pdf.text(`Periodo: ${periodo}`, margin, margin + 27);
+    }
+    pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin + headerHeight, width, height, undefined, "FAST");
     pdf.save(`${nombreBase}.pdf`);
   }
 
   function exportarExcel() {
-    const hoja = XLSX.utils.json_to_sheet(filasExcel([...ingresos, ...egresos]), {
-      header: ["Fecha", "Actividad", "Tipo", "Concepto", "Monto", "Método", "Responsable"],
-    });
+    const filas = filasExcel([...ingresos, ...egresos]);
+    const hoja = periodoAnual
+      ? XLSX.utils.aoa_to_sheet([
+          [titulo],
+          [`Periodo: ${periodo}`],
+          [],
+          ["Fecha", "Actividad", "Tipo", "Concepto", "Monto", "Método", "Responsable"],
+          ...filas.map((fila) => [fila.Fecha, fila.Actividad, fila.Tipo, fila.Concepto, fila.Monto, fila.Método, fila.Responsable]),
+        ])
+      : XLSX.utils.json_to_sheet(filas, {
+          header: ["Fecha", "Actividad", "Tipo", "Concepto", "Monto", "Método", "Responsable"],
+        });
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, "Movimientos");
     XLSX.writeFile(libro, `${nombreBase}.xlsx`);
