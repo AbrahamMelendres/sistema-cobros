@@ -45,5 +45,5 @@ export interface ResumenCaja {
 
 export interface ResumenResponsable {
   responsable: string;
-  monto: number;
+  dinero_bajo_responsabilidad: number;
 }
