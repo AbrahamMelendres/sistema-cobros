@@ -69,7 +69,7 @@ export default function CustodiaPanel() {
       supabase
         .from("vista_dinero_por_responsable")
         .select("*")
-        .order("monto", { ascending: false }),
+        .order("dinero_bajo_responsabilidad", { ascending: false }),
       supabase
         .from("custodia_movimientos")
         .select("id, responsable_id, tipo, monto, fecha, observaciones, responsable:responsables(nombre)")
@@ -179,7 +179,7 @@ export default function CustodiaPanel() {
                   saldos.map((saldo) => (
                     <tr key={saldo.responsable} className="border-b border-[var(--color-line)] last:border-0">
                       <td className="px-4 py-2.5">{saldo.responsable || "Sin responsable"}</td>
-                      <td className="px-4 py-2.5 text-right font-medium">{formatoMoneda(Number(saldo.monto) || 0)}</td>
+                      <td className="px-4 py-2.5 text-right font-medium">{formatoMoneda(Number(saldo.dinero_bajo_responsabilidad) || 0)}</td>
                     </tr>
                   ))
                 )}

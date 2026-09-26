@@ -33,7 +33,10 @@ export default function CajaResumen() {
 
       const [cajaResult, responsablesResult] = await Promise.all([
         supabase.from("vista_resumen_caja").select("*").limit(1).maybeSingle(),
-        supabase.from("vista_dinero_por_responsable").select("*").order("monto", { ascending: false }),
+        supabase
+          .from("vista_dinero_por_responsable")
+          .select("*")
+          .order("dinero_bajo_responsabilidad", { ascending: false }),
       ]);
 
       if (cajaResult.error || responsablesResult.error) {
@@ -128,7 +131,7 @@ export default function CajaResumen() {
                     responsables.map((item) => (
                       <tr key={item.responsable} className="border-b border-[var(--color-line)] last:border-0">
                         <td className="px-4 py-2.5">{item.responsable || "Sin responsable"}</td>
-                        <td className="px-4 py-2.5 text-right font-medium">{formatoMoneda(Number(item.monto) || 0)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium">{formatoMoneda(Number(item.dinero_bajo_responsabilidad) || 0)}</td>
                       </tr>
                     ))
                   )}

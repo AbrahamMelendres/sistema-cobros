@@ -8,7 +8,7 @@ import GeneradorInforme, {
   type PendienteInforme,
 } from "@/components/GeneradorInforme";
 
-type Periodo = "dia" | "semana" | "mes";
+type Periodo = "dia" | "semana" | "mes" | "anio";
 
 interface OpcionCatalogo {
   id: string;
@@ -63,7 +63,11 @@ function fechaLocalISO(fecha: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function rangoDelPeriodo(periodo: Periodo, fechaReferencia: string) {
+function rangoDelPeriodo(periodo: Periodo, fechaReferencia: string, anioReferencia: number) {
+  if (periodo === "anio") {
+    return { inicio: `${anioReferencia}-01-01`, fin: `${anioReferencia}-12-31` };
+  }
+
   const fecha = new Date(`${fechaReferencia}T00:00:00`);
   let inicio = new Date(fecha);
   let fin = new Date(fecha);
@@ -115,10 +119,15 @@ export default function InformeCajaDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [periodo, setPeriodo] = useState<Periodo>("dia");
   const [fechaReferencia, setFechaReferencia] = useState(() => fechaLocalISO(new Date()));
+  const [anioReferencia, setAnioReferencia] = useState(() => String(new Date().getFullYear()));
   const [actividadId, setActividadId] = useState("");
   const [responsableId, setResponsableId] = useState("");
 
-  const rango = rangoDelPeriodo(periodo, fechaReferencia);
+  const anioNumerico = Number(anioReferencia);
+  const anioSeleccionado = /^\d{4}$/.test(anioReferencia) && anioNumerico >= 1000 && anioNumerico <= 9999
+    ? anioNumerico
+    : new Date().getFullYear();
+  const rango = rangoDelPeriodo(periodo, fechaReferencia, anioSeleccionado);
 
   async function cargarDatos() {
     setLoading(true);
@@ -129,16 +138,6 @@ export default function InformeCajaDashboard() {
       .select("id, fecha, actividad_id, responsable_id, tipo, concepto, monto, metodo_pago, actividad:actividades(nombre), responsable:responsables(nombre)")
       .gte("fecha", rango.inicio)
       .lte("fecha", rango.fin);
-    let actividadesQuery = supabase
-      .from("vista_resumen_por_actividad")
-      .select("*")
-      .gte("fecha", rango.inicio)
-      .lte("fecha", rango.fin);
-    let responsablesQuery = supabase
-      .from("movimientos")
-      .select("responsable_id, tipo, monto, responsables(nombre)")
-      .gte("fecha", rango.inicio)
-      .lte("fecha", rango.fin);
     let pendientesQuery = supabase
       .from("pendientes")
       .select("descripcion, monto, estado, fecha_registro, actividad:actividades(nombre), responsable:responsables(nombre)")
@@ -147,21 +146,15 @@ export default function InformeCajaDashboard() {
 
     if (actividadId) {
       movimientosQuery = movimientosQuery.eq("actividad_id", actividadId);
-      actividadesQuery = actividadesQuery.eq("actividad_id", actividadId);
-      responsablesQuery = responsablesQuery.eq("actividad_id", actividadId);
       pendientesQuery = pendientesQuery.eq("actividad_id", actividadId);
     }
     if (responsableId) {
       movimientosQuery = movimientosQuery.eq("responsable_id", responsableId);
-      actividadesQuery = actividadesQuery.eq("responsable_id", responsableId);
-      responsablesQuery = responsablesQuery.eq("responsable_id", responsableId);
       pendientesQuery = pendientesQuery.eq("responsable_id", responsableId);
     }
 
-    const [movimientosResult, actividadesResult, responsablesResult, pendientesResult, catalogosResult] = await Promise.all([
+    const [movimientosResult, pendientesResult, catalogosResult] = await Promise.all([
       movimientosQuery,
-      actividadesQuery,
-      responsablesQuery,
       pendientesQuery,
       Promise.all([
         supabase.from("actividades").select("id, nombre").eq("activa", true).order("nombre"),
@@ -170,16 +163,48 @@ export default function InformeCajaDashboard() {
     ]);
 
     const catalogoError = catalogosResult[0].error ?? catalogosResult[1].error;
-    const primerError = movimientosResult.error ?? actividadesResult.error ?? responsablesResult.error ?? pendientesResult.error ?? catalogoError;
+  const primerError = movimientosResult.error ?? pendientesResult.error ?? catalogoError;
     if (primerError) {
       setError(`No se pudo cargar el informe de caja: ${primerError.message}`);
       setLoading(false);
       return;
     }
 
-    setMovimientos((movimientosResult.data ?? []) as Movimiento[]);
-    setResumenActividades((actividadesResult.data ?? []) as ResumenActividad[]);
-    setResumenResponsables((responsablesResult.data ?? []) as ResumenResponsable[]);
+    const movimientosFiltrados = (movimientosResult.data ?? []) as Movimiento[];
+    const actividadesAgrupadas = new Map<string, ResumenActividad>();
+    const responsablesAgrupados = new Map<string, ResumenResponsable>();
+    for (const movimiento of movimientosFiltrados) {
+      const monto = Number(movimiento.monto) || 0;
+      const actividadKey = movimiento.actividad_id ?? "sin-actividad";
+      const actividad = actividadesAgrupadas.get(actividadKey) ?? {
+        actividad_id: movimiento.actividad_id,
+        actividad_nombre: nombreRelacionado(movimiento.actividad, "Sin actividad"),
+        total_ingresos: 0,
+        total_egresos: 0,
+        total_movimientos: 0,
+      };
+      actividad.total_movimientos = (actividad.total_movimientos ?? 0) + 1;
+      if (movimiento.tipo === "Ingreso") actividad.total_ingresos = (actividad.total_ingresos ?? 0) + monto;
+      else actividad.total_egresos = (actividad.total_egresos ?? 0) + monto;
+      actividadesAgrupadas.set(actividadKey, actividad);
+
+      const responsableKey = movimiento.responsable_id ?? "sin-responsable";
+      const responsable = responsablesAgrupados.get(responsableKey) ?? {
+        responsable_id: movimiento.responsable_id,
+        responsable_nombre: nombreRelacionado(movimiento.responsable, "Sin responsable"),
+        total_ingresos: 0,
+        total_egresos: 0,
+        total_movimientos: 0,
+      };
+      responsable.total_movimientos = (responsable.total_movimientos ?? 0) + 1;
+      if (movimiento.tipo === "Ingreso") responsable.total_ingresos = (responsable.total_ingresos ?? 0) + monto;
+      else responsable.total_egresos = (responsable.total_egresos ?? 0) + monto;
+      responsablesAgrupados.set(responsableKey, responsable);
+    }
+
+    setMovimientos(movimientosFiltrados);
+    setResumenActividades(Array.from(actividadesAgrupadas.values()));
+    setResumenResponsables(Array.from(responsablesAgrupados.values()));
     setPendientes((pendientesResult.data ?? []) as Pendiente[]);
     setActividades(catalogosResult[0].data ?? []);
     setResponsables(catalogosResult[1].data ?? []);
@@ -189,7 +214,7 @@ export default function InformeCajaDashboard() {
   useEffect(() => {
     cargarDatos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, periodo, fechaReferencia, actividadId, responsableId]);
+  }, [supabase, periodo, fechaReferencia, anioReferencia, actividadId, responsableId]);
 
   useEffect(() => {
     const cargarPorCambio = () => cargarDatos();
@@ -204,7 +229,7 @@ export default function InformeCajaDashboard() {
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, periodo, fechaReferencia, actividadId, responsableId]);
+  }, [supabase, periodo, fechaReferencia, anioReferencia, actividadId, responsableId]);
 
   const totales = useMemo(() => {
     const ingresos = movimientos
@@ -245,7 +270,9 @@ export default function InformeCajaDashboard() {
     ? `Día ${formatFecha(rango.inicio)}`
     : periodo === "semana"
     ? `Semana ${formatFecha(rango.inicio)} - ${formatFecha(rango.fin)}`
-    : `Mes ${formatFecha(rango.inicio)} - ${formatFecha(rango.fin)}`;
+    : periodo === "mes"
+    ? `Mes ${formatFecha(rango.inicio)} - ${formatFecha(rango.fin)}`
+    : `Año ${anioSeleccionado}`;
 
   const tarjetas = [
     { label: "Total de ingresos", valor: totales.ingresos, tono: "ok" },
@@ -286,6 +313,7 @@ export default function InformeCajaDashboard() {
     egresos: egresosInforme,
     pendientes: pendientesInforme,
     detalleActividad: detalleActividadInforme,
+    // TODO: Calcular fondos anteriores con los registros previos al inicio del período.
     saldoCaja: totales.neto,
     saldoNeto: totales.neto - pendientesInforme.reduce((total, pendiente) => total + pendiente.monto, 0),
   };
@@ -309,21 +337,38 @@ export default function InformeCajaDashboard() {
         <div>
           <span className="mb-1.5 block text-xs font-medium text-[var(--color-ink-soft)]">Período del informe</span>
           <div className="flex rounded-lg border border-[var(--color-line)] p-0.5">
-            {(["dia", "semana", "mes"] as const).map((opcion) => (
+            {(["dia", "semana", "mes", "anio"] as const).map((opcion) => (
               <button
                 key={opcion}
                 type="button"
                 onClick={() => setPeriodo(opcion)}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${periodo === opcion ? "bg-[var(--color-navy-800)] text-white" : "text-[var(--color-ink-soft)] hover:bg-[var(--color-navy-50)]"}`}
               >
-                {opcion === "dia" ? "Día" : opcion === "semana" ? "Semana" : "Mes"}
+                {opcion === "dia" ? "Día" : opcion === "semana" ? "Semana" : opcion === "mes" ? "Mes" : "Año"}
               </button>
             ))}
           </div>
         </div>
         <label className="text-xs font-medium text-[var(--color-ink-soft)]">
-          Fecha de referencia
-          <input type="date" value={fechaReferencia} onChange={(event) => setFechaReferencia(event.target.value)} className="mt-1 block rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-sm font-normal text-[var(--color-ink)]" />
+          {periodo === "anio" ? "Año de referencia" : "Fecha de referencia"}
+          {periodo === "anio" ? (
+            <input
+              type="number"
+              min="1000"
+              max="9999"
+              step="1"
+              value={anioReferencia}
+              onChange={(event) => setAnioReferencia(event.target.value)}
+              onBlur={() => {
+                if (!/^\d{4}$/.test(anioReferencia) || anioNumerico < 1000 || anioNumerico > 9999) {
+                  setAnioReferencia(String(new Date().getFullYear()));
+                }
+              }}
+              className="mt-1 block w-32 rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-sm font-normal text-[var(--color-ink)]"
+            />
+          ) : (
+            <input type="date" value={fechaReferencia} onChange={(event) => setFechaReferencia(event.target.value)} className="mt-1 block rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-sm font-normal text-[var(--color-ink)]" />
+          )}
         </label>
         <label className="text-xs font-medium text-[var(--color-ink-soft)]">
           Actividad
