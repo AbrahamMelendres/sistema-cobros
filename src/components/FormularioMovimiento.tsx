@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import SelectConCrear from "@/components/SelectConCrear";
 
 type TipoMovimiento = "Ingreso" | "Egreso";
 type MetodoPago = "Efectivo" | "QR";
@@ -41,6 +42,7 @@ export default function FormularioMovimiento() {
   const supabase = useMemo(() => createClient(), []);
   const [actividades, setActividades] = useState<OpcionCatalogo[]>([]);
   const [responsables, setResponsables] = useState<OpcionCatalogo[]>([]);
+  const [puedeCrear, setPuedeCrear] = useState(false);
   const [formulario, setFormulario] = useState<MovimientoFormulario>(formularioInicial);
   const [movimientoParaDuplicar, setMovimientoParaDuplicar] = useState<MovimientoFormulario | null>(null);
   const [loadingCatalogos, setLoadingCatalogos] = useState(true);
@@ -53,7 +55,7 @@ export default function FormularioMovimiento() {
       setLoadingCatalogos(true);
       setError(null);
 
-      const [actividadesResult, responsablesResult] = await Promise.all([
+      const [actividadesResult, responsablesResult, rolResult] = await Promise.all([
         supabase
           .from("actividades")
           .select("id, nombre")
@@ -64,6 +66,7 @@ export default function FormularioMovimiento() {
           .select("id, nombre")
           .eq("activo", true)
           .order("nombre"),
+        supabase.rpc("es_administrador"),
       ]);
 
       if (actividadesResult.error || responsablesResult.error) {
@@ -78,11 +81,36 @@ export default function FormularioMovimiento() {
 
       setActividades(actividadesResult.data ?? []);
       setResponsables(responsablesResult.data ?? []);
+      setPuedeCrear(rolResult.data === true);
       setLoadingCatalogos(false);
     }
 
     cargarCatalogos();
   }, [supabase]);
+
+  async function crearActividad(nombre: string) {
+    const { data, error: insertError } = await supabase
+      .from("actividades")
+      .insert({ nombre })
+      .select("id, nombre")
+      .single();
+    if (insertError) throw new Error(insertError.message);
+    if (!data) return null;
+    setActividades((actuales) => [...actuales, data].sort((actividadA, actividadB) => actividadA.nombre.localeCompare(actividadB.nombre)));
+    return data;
+  }
+
+  async function crearResponsable(nombre: string) {
+    const { data, error: insertError } = await supabase
+      .from("responsables")
+      .insert({ nombre })
+      .select("id, nombre")
+      .single();
+    if (insertError) throw new Error(insertError.message);
+    if (!data) return null;
+    setResponsables((actuales) => [...actuales, data].sort((responsableA, responsableB) => responsableA.nombre.localeCompare(responsableB.nombre)));
+    return data;
+  }
 
   function actualizarCampo<K extends keyof MovimientoFormulario>(
     campo: K,
@@ -181,21 +209,21 @@ export default function FormularioMovimiento() {
       )}
 
       <form onSubmit={enviarFormulario} className="grid gap-4 sm:grid-cols-2">
-        <label className={labelClass}>
-          Actividad
-          <select
-            required
-            value={campoTexto(formulario, "actividad_id")}
-            onChange={(event) => actualizarCampo("actividad_id", event.target.value)}
+        <div className={labelClass}>
+          <span>Actividad</span>
+          <SelectConCrear
+            opciones={actividades}
+            valor={campoTexto(formulario, "actividad_id")}
+            onChange={(valor) => actualizarCampo("actividad_id", valor)}
+            onCrear={crearActividad}
+            puedeCrear={puedeCrear}
             disabled={loadingCatalogos || guardando}
+            required
+            placeholder="Selecciona una actividad"
             className={inputClass}
-          >
-            <option value="">Selecciona una actividad</option>
-            {actividades.map((actividad) => (
-              <option key={actividad.id} value={actividad.id}>{actividad.nombre}</option>
-            ))}
-          </select>
-        </label>
+            ariaLabel="Actividad"
+          />
+        </div>
 
         <label className={labelClass}>
           Tipo
@@ -252,21 +280,21 @@ export default function FormularioMovimiento() {
           </select>
         </label>
 
-        <label className={labelClass}>
-          Responsable
-          <select
+        <div className={labelClass}>
+          <span>Responsable</span>
+          <SelectConCrear
+            opciones={responsables}
+            valor={formulario.responsable_id}
+            onChange={(valor) => actualizarCampo("responsable_id", valor)}
+            onCrear={crearResponsable}
+            puedeCrear={puedeCrear}
             required
-            value={formulario.responsable_id}
-            onChange={(event) => actualizarCampo("responsable_id", event.target.value)}
             disabled={loadingCatalogos || guardando}
+            placeholder="Selecciona un responsable"
             className={inputClass}
-          >
-            <option value="">Selecciona un responsable</option>
-            {responsables.map((responsable) => (
-              <option key={responsable.id} value={responsable.id}>{responsable.nombre}</option>
-            ))}
-          </select>
-        </label>
+            ariaLabel="Responsable"
+          />
+        </div>
 
         <label className={labelClass}>
           Persona relacionada <span className="font-normal">(opcional)</span>

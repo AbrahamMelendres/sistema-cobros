@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import SelectConCrear from "@/components/SelectConCrear";
 
 type TipoMovimiento = "Ingreso" | "Egreso";
 type MetodoPago = "Efectivo" | "QR" | "";
@@ -59,6 +60,7 @@ export default function CargaRapidaMovimientos() {
   const supabase = useMemo(() => createClient(), []);
   const [actividades, setActividades] = useState<OpcionCatalogo[]>([]);
   const [responsables, setResponsables] = useState<OpcionCatalogo[]>([]);
+  const [puedeCrear, setPuedeCrear] = useState(false);
   const [filas, setFilas] = useState<FilaMovimiento[]>([]);
   const [filasInvalidas, setFilasInvalidas] = useState<Set<string>>(new Set());
   const [loadingCatalogos, setLoadingCatalogos] = useState(true);
@@ -71,7 +73,7 @@ export default function CargaRapidaMovimientos() {
       setLoadingCatalogos(true);
       setError(null);
 
-      const [actividadesResult, responsablesResult] = await Promise.all([
+      const [actividadesResult, responsablesResult, rolResult] = await Promise.all([
         supabase
           .from("actividades")
           .select("id, nombre")
@@ -82,6 +84,7 @@ export default function CargaRapidaMovimientos() {
           .select("id, nombre")
           .eq("activo", true)
           .order("nombre"),
+        supabase.rpc("es_administrador"),
       ]);
 
       if (actividadesResult.error || responsablesResult.error) {
@@ -96,11 +99,36 @@ export default function CargaRapidaMovimientos() {
 
       setActividades(actividadesResult.data ?? []);
       setResponsables(responsablesResult.data ?? []);
+      setPuedeCrear(rolResult.data === true);
       setLoadingCatalogos(false);
     }
 
     cargarCatalogos();
   }, [supabase]);
+
+  async function crearActividad(nombre: string) {
+    const { data, error: insertError } = await supabase
+      .from("actividades")
+      .insert({ nombre })
+      .select("id, nombre")
+      .single();
+    if (insertError) throw new Error(insertError.message);
+    if (!data) return null;
+    setActividades((actuales) => [...actuales, data].sort((actividadA, actividadB) => actividadA.nombre.localeCompare(actividadB.nombre)));
+    return data;
+  }
+
+  async function crearResponsable(nombre: string) {
+    const { data, error: insertError } = await supabase
+      .from("responsables")
+      .insert({ nombre })
+      .select("id, nombre")
+      .single();
+    if (insertError) throw new Error(insertError.message);
+    if (!data) return null;
+    setResponsables((actuales) => [...actuales, data].sort((responsableA, responsableB) => responsableA.nombre.localeCompare(responsableB.nombre)));
+    return data;
+  }
 
   function agregarFila() {
     setFilas((actuales) => [...actuales, filaVacia()]);
@@ -250,18 +278,17 @@ export default function CargaRapidaMovimientos() {
                     />
                   </td>
                   <td className="px-2 py-2">
-                    <select
-                      value={fila.actividad_id}
-                      onChange={(event) => actualizarFila(fila.id, "actividad_id", event.target.value)}
+                    <SelectConCrear
+                      opciones={actividades}
+                      valor={fila.actividad_id}
+                      onChange={(valor) => actualizarFila(fila.id, "actividad_id", valor)}
+                      onCrear={crearActividad}
+                      puedeCrear={puedeCrear}
                       disabled={loadingCatalogos || guardando}
+                      placeholder="Selecciona"
                       className={`${inputClass} w-44`}
-                      aria-label="Actividad del movimiento"
-                    >
-                      <option value="">Selecciona</option>
-                      {actividades.map((actividad) => (
-                        <option key={actividad.id} value={actividad.id}>{actividad.nombre}</option>
-                      ))}
-                    </select>
+                      ariaLabel="Actividad del movimiento"
+                    />
                   </td>
                   <td className="px-2 py-2">
                     <select
@@ -314,18 +341,17 @@ export default function CargaRapidaMovimientos() {
                     </select>
                   </td>
                   <td className="px-2 py-2">
-                    <select
-                      value={fila.responsable_id}
-                      onChange={(event) => actualizarFila(fila.id, "responsable_id", event.target.value)}
+                    <SelectConCrear
+                      opciones={responsables}
+                      valor={fila.responsable_id}
+                      onChange={(valor) => actualizarFila(fila.id, "responsable_id", valor)}
+                      onCrear={crearResponsable}
+                      puedeCrear={puedeCrear}
                       disabled={loadingCatalogos || guardando}
+                      placeholder="Selecciona"
                       className={`${inputClass} w-44`}
-                      aria-label="Responsable del movimiento"
-                    >
-                      <option value="">Selecciona</option>
-                      {responsables.map((responsable) => (
-                        <option key={responsable.id} value={responsable.id}>{responsable.nombre}</option>
-                      ))}
-                    </select>
+                      ariaLabel="Responsable del movimiento"
+                    />
                   </td>
                 </tr>
               ))

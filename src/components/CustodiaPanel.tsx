@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import SelectConCrear from "@/components/SelectConCrear";
 import type { ResumenResponsable } from "@/lib/types";
 
 type TipoCustodia = "Entrega" | "Gasto" | "Devolucion";
@@ -42,6 +43,7 @@ function nombreResponsable(relacion: { nombre: string }[] | null | undefined) {
 export default function CustodiaPanel() {
   const supabase = useMemo(() => createClient(), []);
   const [responsables, setResponsables] = useState<Responsable[]>([]);
+  const [puedeCrear, setPuedeCrear] = useState(false);
   const [saldos, setSaldos] = useState<ResumenResponsable[]>([]);
   const [movimientos, setMovimientos] = useState<MovimientoCustodia[]>([]);
   const [responsableId, setResponsableId] = useState("");
@@ -58,7 +60,7 @@ export default function CustodiaPanel() {
     setLoading(true);
     setError(null);
 
-    const [responsablesResult, saldosResult, movimientosResult] = await Promise.all([
+    const [responsablesResult, saldosResult, movimientosResult, rolResult] = await Promise.all([
       supabase
         .from("responsables")
         .select("id, nombre")
@@ -72,6 +74,7 @@ export default function CustodiaPanel() {
         .from("custodia_movimientos")
         .select("id, responsable_id, tipo, monto, fecha, observaciones, responsable:responsables(nombre)")
         .order("fecha", { ascending: false }),
+      supabase.rpc("es_administrador"),
     ]);
 
     const primerError = responsablesResult.error ?? saldosResult.error ?? movimientosResult.error;
@@ -82,6 +85,7 @@ export default function CustodiaPanel() {
     }
 
     setResponsables(responsablesResult.data ?? []);
+    setPuedeCrear(rolResult.data === true);
     setSaldos(saldosResult.data ?? []);
     setMovimientos((movimientosResult.data ?? []) as MovimientoCustodia[]);
     setLoading(false);
@@ -91,6 +95,18 @@ export default function CustodiaPanel() {
     cargarDatos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
+
+  async function crearResponsable(nombre: string) {
+    const { data, error: insertError } = await supabase
+      .from("responsables")
+      .insert({ nombre })
+      .select("id, nombre")
+      .single();
+    if (insertError) throw new Error(insertError.message);
+    if (!data) return null;
+    setResponsables((actuales) => [...actuales, data].sort((responsableA, responsableB) => responsableA.nombre.localeCompare(responsableB.nombre)));
+    return data;
+  }
 
   async function registrarMovimiento(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -183,21 +199,21 @@ export default function CustodiaPanel() {
       <section className="mb-8 rounded-xl border border-[var(--color-line)] bg-white p-5 shadow-sm sm:p-6">
         <h2 className="mb-4 font-display text-lg font-semibold text-[var(--color-ink)]">Registrar movimiento de custodia</h2>
         <form onSubmit={registrarMovimiento} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="block text-xs font-medium text-[var(--color-ink-soft)]">
-            Responsable
-            <select
+          <div className="block text-xs font-medium text-[var(--color-ink-soft)]">
+            <span>Responsable</span>
+            <SelectConCrear
+              opciones={responsables}
+              valor={responsableId}
+              onChange={setResponsableId}
+              onCrear={crearResponsable}
+              puedeCrear={puedeCrear}
               required
-              value={responsableId}
-              onChange={(event) => setResponsableId(event.target.value)}
               disabled={loading || guardando}
+              placeholder="Selecciona un responsable"
               className="mt-1 w-full rounded-lg border border-[var(--color-line)] px-3 py-2.5 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-navy-700)]"
-            >
-              <option value="">Selecciona un responsable</option>
-              {responsables.map((responsable) => (
-                <option key={responsable.id} value={responsable.id}>{responsable.nombre}</option>
-              ))}
-            </select>
-          </label>
+              ariaLabel="Responsable"
+            />
+          </div>
 
           <label className="block text-xs font-medium text-[var(--color-ink-soft)]">
             Tipo

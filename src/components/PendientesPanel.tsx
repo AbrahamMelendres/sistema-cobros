@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import SelectConCrear from "@/components/SelectConCrear";
 
 type FiltroPendientes = "todos" | "pendientes" | "pagados";
 type EstadoPendiente = "Pendiente" | "Pagado";
@@ -47,6 +48,7 @@ export default function PendientesPanel() {
   const [pendientes, setPendientes] = useState<Pendiente[]>([]);
   const [actividades, setActividades] = useState<OpcionCatalogo[]>([]);
   const [responsables, setResponsables] = useState<OpcionCatalogo[]>([]);
+  const [puedeCrear, setPuedeCrear] = useState(false);
   const [filtro, setFiltro] = useState<FiltroPendientes>("pendientes");
   const [descripcion, setDescripcion] = useState("");
   const [monto, setMonto] = useState("");
@@ -61,7 +63,7 @@ export default function PendientesPanel() {
     setLoading(true);
     setError(null);
 
-    const [pendientesResult, actividadesResult, responsablesResult] = await Promise.all([
+    const [pendientesResult, actividadesResult, responsablesResult, rolResult] = await Promise.all([
       supabase
         .from("pendientes")
         .select("id, descripcion, monto, actividad_id, responsable_id, estado, fecha_registro, fecha_pago, actividad:actividades(nombre), responsable:responsables(nombre)")
@@ -76,6 +78,7 @@ export default function PendientesPanel() {
         .select("id, nombre")
         .eq("activo", true)
         .order("nombre"),
+      supabase.rpc("es_administrador"),
     ]);
 
     const primerError = pendientesResult.error ?? actividadesResult.error ?? responsablesResult.error;
@@ -88,6 +91,7 @@ export default function PendientesPanel() {
     setPendientes((pendientesResult.data ?? []) as Pendiente[]);
     setActividades(actividadesResult.data ?? []);
     setResponsables(responsablesResult.data ?? []);
+    setPuedeCrear(rolResult.data === true);
     setLoading(false);
   }
 
@@ -95,6 +99,30 @@ export default function PendientesPanel() {
     cargarDatos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
+
+  async function crearActividad(nombre: string) {
+    const { data, error: insertError } = await supabase
+      .from("actividades")
+      .insert({ nombre })
+      .select("id, nombre")
+      .single();
+    if (insertError) throw new Error(insertError.message);
+    if (!data) return null;
+    setActividades((actuales) => [...actuales, data].sort((actividadA, actividadB) => actividadA.nombre.localeCompare(actividadB.nombre)));
+    return data;
+  }
+
+  async function crearResponsable(nombre: string) {
+    const { data, error: insertError } = await supabase
+      .from("responsables")
+      .insert({ nombre })
+      .select("id, nombre")
+      .single();
+    if (insertError) throw new Error(insertError.message);
+    if (!data) return null;
+    setResponsables((actuales) => [...actuales, data].sort((responsableA, responsableB) => responsableA.nombre.localeCompare(responsableB.nombre)));
+    return data;
+  }
 
   async function crearPendiente(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -217,34 +245,34 @@ export default function PendientesPanel() {
               {guardando ? "Guardando…" : "Crear pendiente"}
             </button>
           </div>
-          <label className={labelClass}>
-            Actividad <span className="font-normal">(opcional)</span>
-            <select
-              value={actividadId}
-              onChange={(event) => setActividadId(event.target.value)}
+          <div className={labelClass}>
+            <span>Actividad <span className="font-normal">(opcional)</span></span>
+            <SelectConCrear
+              opciones={actividades}
+              valor={actividadId}
+              onChange={setActividadId}
+              onCrear={crearActividad}
+              puedeCrear={puedeCrear}
               disabled={loading || guardando}
+              placeholder="Sin actividad"
               className={inputClass}
-            >
-              <option value="">Sin actividad</option>
-              {actividades.map((actividad) => (
-                <option key={actividad.id} value={actividad.id}>{actividad.nombre}</option>
-              ))}
-            </select>
-          </label>
-          <label className={`${labelClass} sm:col-span-2`}>
-            Responsable <span className="font-normal">(opcional)</span>
-            <select
-              value={responsableId}
-              onChange={(event) => setResponsableId(event.target.value)}
+              ariaLabel="Actividad"
+            />
+          </div>
+          <div className={`${labelClass} sm:col-span-2`}>
+            <span>Responsable <span className="font-normal">(opcional)</span></span>
+            <SelectConCrear
+              opciones={responsables}
+              valor={responsableId}
+              onChange={setResponsableId}
+              onCrear={crearResponsable}
+              puedeCrear={puedeCrear}
               disabled={loading || guardando}
+              placeholder="Sin responsable"
               className={inputClass}
-            >
-              <option value="">Sin responsable</option>
-              {responsables.map((responsable) => (
-                <option key={responsable.id} value={responsable.id}>{responsable.nombre}</option>
-              ))}
-            </select>
-          </label>
+              ariaLabel="Responsable"
+            />
+          </div>
         </form>
       </section>
 
