@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 export interface OpcionSelectConCrear {
   id: string;
@@ -12,7 +13,7 @@ interface SelectConCrearProps {
   valor: string;
   onChange: (valor: string) => void;
   onCrear: (nombre: string) => Promise<OpcionSelectConCrear | null>;
-  puedeCrear: boolean;
+  puedeCrear?: boolean;
   placeholder: string;
   className: string;
   required?: boolean;
@@ -25,17 +26,36 @@ export default function SelectConCrear({
   valor,
   onChange,
   onCrear,
-  puedeCrear,
+  puedeCrear: puedeCrearProp,
   placeholder,
   className,
   required = false,
   disabled = false,
   ariaLabel,
 }: SelectConCrearProps) {
+  const supabase = useMemo(() => createClient(), []);
   const [creando, setCreando] = useState(false);
   const [nombre, setNombre] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [puedeCrear, setPuedeCrear] = useState(Boolean(puedeCrearProp));
+
+  useEffect(() => {
+    async function verificarPermiso() {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        setPuedeCrear(false);
+        return;
+      }
+
+      const { data } = await supabase.rpc("es_administrador");
+      setPuedeCrear(data === true);
+    }
+
+    void verificarPermiso();
+  }, [supabase]);
+
+  const puedeCrearActual = puedeCrearProp || puedeCrear;
 
   function cancelar() {
     setCreando(false);
@@ -130,7 +150,7 @@ export default function SelectConCrear({
         {opciones.map((opcion) => (
           <option key={opcion.id} value={opcion.id}>{opcion.nombre}</option>
         ))}
-        {puedeCrear && <option value="__agregar_nuevo__">+ Agregar nuevo...</option>}
+        {puedeCrearActual && <option value="__agregar_nuevo__">+ Agregar nuevo...</option>}
       </select>
       {error && <p role="alert" className="mt-1 text-xs text-[var(--color-pending)]">{error}</p>}
     </div>
