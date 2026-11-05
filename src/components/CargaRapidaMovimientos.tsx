@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useUserRole } from "@/hooks/useUserRole";
 import SelectConCrear from "@/components/SelectConCrear";
 
 type TipoMovimiento = "Ingreso" | "Egreso";
@@ -58,9 +59,9 @@ function filaCompleta(fila: FilaMovimiento) {
 
 export default function CargaRapidaMovimientos() {
   const supabase = useMemo(() => createClient(), []);
+  const { isAdmin, canOperate, error: roleError } = useUserRole(supabase);
   const [actividades, setActividades] = useState<OpcionCatalogo[]>([]);
   const [responsables, setResponsables] = useState<OpcionCatalogo[]>([]);
-  const [puedeCrear, setPuedeCrear] = useState(false);
   const [filas, setFilas] = useState<FilaMovimiento[]>([]);
   const [filasInvalidas, setFilasInvalidas] = useState<Set<string>>(new Set());
   const siguienteIdFila = useRef(0);
@@ -74,7 +75,7 @@ export default function CargaRapidaMovimientos() {
       setLoadingCatalogos(true);
       setError(null);
 
-      const [actividadesResult, responsablesResult, rolResult] = await Promise.all([
+      const [actividadesResult, responsablesResult] = await Promise.all([
         supabase
           .from("actividades")
           .select("id, nombre")
@@ -85,7 +86,6 @@ export default function CargaRapidaMovimientos() {
           .select("id, nombre")
           .eq("activo", true)
           .order("nombre"),
-        supabase.rpc("es_administrador"),
       ]);
 
       if (actividadesResult.error || responsablesResult.error) {
@@ -100,7 +100,6 @@ export default function CargaRapidaMovimientos() {
 
       setActividades(actividadesResult.data ?? []);
       setResponsables(responsablesResult.data ?? []);
-      setPuedeCrear(rolResult.data === true);
       setLoadingCatalogos(false);
     }
 
@@ -156,6 +155,7 @@ export default function CargaRapidaMovimientos() {
   }
 
   async function guardarTodo() {
+    if (!canOperate) return;
     setError(null);
     setMensaje(null);
 
@@ -199,7 +199,9 @@ export default function CargaRapidaMovimientos() {
   const inputClass = "rounded-md border border-[var(--color-line)] bg-white px-2 py-1.5 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-navy-700)] focus:ring-2 focus:ring-[var(--color-navy-100)]";
 
   return (
-    <section className="mt-6 rounded-xl border border-[var(--color-line)] bg-white shadow-sm">
+    <>
+    {roleError && <p role="alert" className="mt-4 rounded-lg bg-[var(--color-pending-bg)] px-3 py-2 text-sm text-[var(--color-pending)]">No se pudo verificar el rol: {roleError}</p>}
+    {canOperate && <section className="mt-6 rounded-xl border border-[var(--color-line)] bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-line)] px-4 py-4 sm:px-5">
         <div>
           <h2 className="font-display text-lg font-semibold text-[var(--color-ink)]">Carga rápida de movimientos</h2>
@@ -285,7 +287,7 @@ export default function CargaRapidaMovimientos() {
                       valor={fila.actividad_id}
                       onChange={(valor) => actualizarFila(fila.id, "actividad_id", valor)}
                       onCrear={crearActividad}
-                      puedeCrear={puedeCrear}
+                      puedeCrear={isAdmin}
                       disabled={loadingCatalogos || guardando}
                       placeholder="Selecciona"
                       className={`${inputClass} w-44`}
@@ -348,7 +350,7 @@ export default function CargaRapidaMovimientos() {
                       valor={fila.responsable_id}
                       onChange={(valor) => actualizarFila(fila.id, "responsable_id", valor)}
                       onCrear={crearResponsable}
-                      puedeCrear={puedeCrear}
+                      puedeCrear={isAdmin}
                       disabled={loadingCatalogos || guardando}
                       placeholder="Selecciona"
                       className={`${inputClass} w-44`}
@@ -361,6 +363,7 @@ export default function CargaRapidaMovimientos() {
           </tbody>
         </table>
       </div>
-    </section>
+    </section>}
+    </>
   );
 }

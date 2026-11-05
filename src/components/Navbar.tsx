@@ -3,16 +3,18 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useUserRole } from "@/hooks/useUserRole";
 
 export default function Navbar({ nombre }: { nombre: string }) {
   const pathname = usePathname();
   const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+  const { isAdmin: esAdministrador, error: roleError } = useUserRole(supabase);
   const [cajaAbierta, setCajaAbierta] = useState(false);
   const [informesAbiertos, setInformesAbiertos] = useState(false);
   const [masAbierto, setMasAbierto] = useState(false);
-  const [esAdministrador, setEsAdministrador] = useState(false);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -20,19 +22,6 @@ export default function Navbar({ nombre }: { nombre: string }) {
     router.push("/login");
     router.refresh();
   }
-
-  useEffect(() => {
-    async function verificarRol() {
-      const supabase = createClient();
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) return;
-
-      const { data } = await supabase.rpc("es_administrador");
-      setEsAdministrador(data === true);
-    }
-
-    verificarRol();
-  }, []);
 
   const linkClass = (href: string) =>
     `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
@@ -178,6 +167,11 @@ export default function Navbar({ nombre }: { nombre: string }) {
           Salir
         </button>
       </div>
+      {roleError && (
+        <p role="alert" className="border-t border-[var(--color-line)] bg-[var(--color-pending-bg)] px-4 py-2 text-center text-xs text-[var(--color-pending)]">
+          No se pudo verificar el rol: {roleError}
+        </p>
+      )}
       <nav
         aria-label="Navegación principal"
         className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-[var(--color-line)] bg-[#090e19]/95 px-2 pb-[env(safe-area-inset-bottom)] pt-1 shadow-[0_-8px_24px_rgb(0_0_0_/_25%)] backdrop-blur-xl sm:hidden"

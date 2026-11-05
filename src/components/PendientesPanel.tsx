@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useUserRole } from "@/hooks/useUserRole";
 import SelectConCrear from "@/components/SelectConCrear";
 
 type FiltroPendientes = "todos" | "pendientes" | "pagados";
@@ -45,10 +46,10 @@ function nombreRelacionado(relacion: { nombre: string }[] | null | undefined) {
 
 export default function PendientesPanel() {
   const supabase = useMemo(() => createClient(), []);
+  const { isAdmin, canOperate, error: roleError } = useUserRole(supabase);
   const [pendientes, setPendientes] = useState<Pendiente[]>([]);
   const [actividades, setActividades] = useState<OpcionCatalogo[]>([]);
   const [responsables, setResponsables] = useState<OpcionCatalogo[]>([]);
-  const [puedeCrear, setPuedeCrear] = useState(false);
   const [filtro, setFiltro] = useState<FiltroPendientes>("pendientes");
   const [descripcion, setDescripcion] = useState("");
   const [monto, setMonto] = useState("");
@@ -63,7 +64,7 @@ export default function PendientesPanel() {
     setLoading(true);
     setError(null);
 
-    const [pendientesResult, actividadesResult, responsablesResult, rolResult] = await Promise.all([
+    const [pendientesResult, actividadesResult, responsablesResult] = await Promise.all([
       supabase
         .from("pendientes")
         .select("id, descripcion, monto, actividad_id, responsable_id, estado, fecha_registro, fecha_pago, actividad:actividades(nombre), responsable:responsables(nombre)")
@@ -78,7 +79,6 @@ export default function PendientesPanel() {
         .select("id, nombre")
         .eq("activo", true)
         .order("nombre"),
-      supabase.rpc("es_administrador"),
     ]);
 
     const primerError = pendientesResult.error ?? actividadesResult.error ?? responsablesResult.error;
@@ -91,7 +91,6 @@ export default function PendientesPanel() {
     setPendientes((pendientesResult.data ?? []) as Pendiente[]);
     setActividades(actividadesResult.data ?? []);
     setResponsables(responsablesResult.data ?? []);
-    setPuedeCrear(rolResult.data === true);
     setLoading(false);
   }
 
@@ -126,6 +125,7 @@ export default function PendientesPanel() {
 
   async function crearPendiente(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canOperate) return;
     setError(null);
     setMensaje(null);
 
@@ -164,6 +164,7 @@ export default function PendientesPanel() {
   }
 
   async function marcarComoPagado(pendiente: Pendiente) {
+    if (!canOperate) return;
     if (!confirm(`¿Marcar como pagado el pendiente "${pendiente.descripcion}"?`)) return;
 
     setError(null);
@@ -203,11 +204,16 @@ export default function PendientesPanel() {
       {error && (
         <p className="mb-4 rounded-lg bg-[var(--color-pending-bg)] px-3 py-2 text-sm text-[var(--color-pending)]">{error}</p>
       )}
+      {roleError && (
+        <p role="alert" className="mb-4 rounded-lg bg-[var(--color-pending-bg)] px-3 py-2 text-sm text-[var(--color-pending)]">
+          No se pudo verificar el rol: {roleError}
+        </p>
+      )}
       {mensaje && (
         <p className="mb-4 rounded-lg bg-[var(--color-ok-bg)] px-3 py-2 text-sm text-[var(--color-ok)]">{mensaje}</p>
       )}
 
-      <section className="mb-8 rounded-xl border border-[var(--color-line)] bg-white p-5 shadow-sm sm:p-6">
+      {canOperate && <section className="mb-8 rounded-xl border border-[var(--color-line)] bg-white p-5 shadow-sm sm:p-6">
         <h2 className="mb-4 font-display text-lg font-semibold text-[var(--color-ink)]">Crear nuevo pendiente</h2>
         <form onSubmit={crearPendiente} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <label className={`${labelClass} lg:col-span-2`}>
@@ -252,7 +258,7 @@ export default function PendientesPanel() {
               valor={actividadId}
               onChange={setActividadId}
               onCrear={crearActividad}
-              puedeCrear={puedeCrear}
+              puedeCrear={isAdmin}
               disabled={loading || guardando}
               placeholder="Sin actividad"
               className={inputClass}
@@ -266,7 +272,7 @@ export default function PendientesPanel() {
               valor={responsableId}
               onChange={setResponsableId}
               onCrear={crearResponsable}
-              puedeCrear={puedeCrear}
+              puedeCrear={isAdmin}
               disabled={loading || guardando}
               placeholder="Sin responsable"
               className={inputClass}
@@ -274,7 +280,7 @@ export default function PendientesPanel() {
             />
           </div>
         </form>
-      </section>
+      </section>}
 
       <section className="overflow-hidden rounded-xl border border-[var(--color-line)] bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-line)] px-4 py-4">
@@ -328,7 +334,7 @@ export default function PendientesPanel() {
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">{pendiente.fecha_registro}</td>
                     <td className="px-3 py-2.5 text-right">
-                      {pendiente.estado === "Pendiente" && (
+                      {canOperate && pendiente.estado === "Pendiente" && (
                         <button
                           type="button"
                           onClick={() => marcarComoPagado(pendiente)}

@@ -14,6 +14,7 @@ export interface EquipoRegistro {
 export interface Registro {
   id: string;
   fecha: string; // YYYY-MM-DD
+  actividad_id: string | null;
   numero: number | null;
   nombre_completo: string | null;
   ci: string | null;
@@ -23,6 +24,7 @@ export interface Registro {
   monto: number;
   metodo_pago: MetodoPago | null;
   estado: Estado;
+  servicio: Servicio | null; // Legacy column; use servicios instead.
   servicios: Servicio[];
   estado_pago: EstadoPago;
   estado_entrega: EstadoEntrega;
@@ -33,14 +35,17 @@ export interface Registro {
   created_at: string;
 }
 
-export type RegistroInput = Omit<Registro, "id" | "created_at">;
+export type RegistroInput = Omit<Registro, "id" | "created_at" | "actividad_id" | "servicio"> & {
+  actividad_id?: string | null;
+  servicio?: Servicio | null;
+};
 
 export interface ResumenCaja {
   total_ingresos: number;
   total_egresos: number;
   pendientes_por_pagar: number;
   saldo_actual: number;
-  saldo_neto_despues_pendientes: number;
+  saldo_neto: number;
 }
 
 export interface ResumenResponsable {

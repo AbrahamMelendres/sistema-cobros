@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useUserRole } from "@/hooks/useUserRole";
 import SelectConCrear from "@/components/SelectConCrear";
 
 type TipoMovimiento = "Ingreso" | "Egreso";
@@ -40,9 +41,9 @@ function campoTexto(estado: MovimientoFormulario, campo: keyof MovimientoFormula
 
 export default function FormularioMovimiento() {
   const supabase = useMemo(() => createClient(), []);
+  const { isAdmin, canOperate, error: roleError } = useUserRole(supabase);
   const [actividades, setActividades] = useState<OpcionCatalogo[]>([]);
   const [responsables, setResponsables] = useState<OpcionCatalogo[]>([]);
-  const [puedeCrear, setPuedeCrear] = useState(false);
   const [formulario, setFormulario] = useState<MovimientoFormulario>(formularioInicial);
   const [movimientoParaDuplicar, setMovimientoParaDuplicar] = useState<MovimientoFormulario | null>(null);
   const [loadingCatalogos, setLoadingCatalogos] = useState(true);
@@ -55,7 +56,7 @@ export default function FormularioMovimiento() {
       setLoadingCatalogos(true);
       setError(null);
 
-      const [actividadesResult, responsablesResult, rolResult] = await Promise.all([
+      const [actividadesResult, responsablesResult] = await Promise.all([
         supabase
           .from("actividades")
           .select("id, nombre")
@@ -66,7 +67,6 @@ export default function FormularioMovimiento() {
           .select("id, nombre")
           .eq("activo", true)
           .order("nombre"),
-        supabase.rpc("es_administrador"),
       ]);
 
       if (actividadesResult.error || responsablesResult.error) {
@@ -81,7 +81,6 @@ export default function FormularioMovimiento() {
 
       setActividades(actividadesResult.data ?? []);
       setResponsables(responsablesResult.data ?? []);
-      setPuedeCrear(rolResult.data === true);
       setLoadingCatalogos(false);
     }
 
@@ -123,6 +122,7 @@ export default function FormularioMovimiento() {
 
   async function enviarFormulario(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canOperate) return;
     setError(null);
     setMensaje(null);
 
@@ -202,13 +202,18 @@ export default function FormularioMovimiento() {
           {error}
         </p>
       )}
+      {roleError && (
+        <p role="alert" className="mb-4 rounded-lg bg-[var(--color-pending-bg)] px-3 py-2 text-sm text-[var(--color-pending)]">
+          No se pudo verificar el rol: {roleError}
+        </p>
+      )}
       {mensaje && (
         <p className="mb-4 rounded-lg bg-[var(--color-ok-bg)] px-3 py-2 text-sm text-[var(--color-ok)]">
           {mensaje}
         </p>
       )}
 
-      <form onSubmit={enviarFormulario} className="grid gap-4 sm:grid-cols-2">
+      {canOperate && <form onSubmit={enviarFormulario} className="grid gap-4 sm:grid-cols-2">
         <div className={labelClass}>
           <span>Actividad</span>
           <SelectConCrear
@@ -216,7 +221,7 @@ export default function FormularioMovimiento() {
             valor={campoTexto(formulario, "actividad_id")}
             onChange={(valor) => actualizarCampo("actividad_id", valor)}
             onCrear={crearActividad}
-            puedeCrear={puedeCrear}
+            puedeCrear={isAdmin}
             disabled={loadingCatalogos || guardando}
             required
             placeholder="Selecciona una actividad"
@@ -287,7 +292,7 @@ export default function FormularioMovimiento() {
             valor={formulario.responsable_id}
             onChange={(valor) => actualizarCampo("responsable_id", valor)}
             onCrear={crearResponsable}
-            puedeCrear={puedeCrear}
+            puedeCrear={isAdmin}
             required
             disabled={loadingCatalogos || guardando}
             placeholder="Selecciona un responsable"
@@ -326,7 +331,7 @@ export default function FormularioMovimiento() {
             {guardando ? "Guardando…" : "Guardar movimiento"}
           </button>
         </div>
-      </form>
+      </form>}
     </section>
   );
 }

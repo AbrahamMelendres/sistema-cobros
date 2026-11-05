@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useUserRole } from "@/hooks/useUserRole";
 import type {
   Registro,
   Estado,
@@ -111,6 +112,7 @@ function equiposTienenDetalleOtros(equipos: EquipoRegistro[]) {
 
 export default function RegistroDia() {
   const supabase = useMemo(() => createClient(), []);
+  const { isAdmin, canOperate, error: roleError } = useUserRole(supabase);
   const [fecha, setFecha] = useState(todayISO());
   const [registros, setRegistros] = useState<Registro[]>([]);
   const [fechasConDatos, setFechasConDatos] = useState<string[]>([]);
@@ -119,6 +121,9 @@ export default function RegistroDia() {
   const [nombreEncargada, setNombreEncargada] = useState<string>("");
   const [importando, setImportando] = useState(false);
   const [mensajeExcel, setMensajeExcel] = useState<string | null>(null);
+  const [errorPerfil, setErrorPerfil] = useState<string | null>(null);
+  const [errorFechas, setErrorFechas] = useState<string | null>(null);
+  const [errorRegistros, setErrorRegistros] = useState<string | null>(null);
   const [vistaPrevia, setVistaPrevia] = useState<RegistroInput[] | null>(null);
   const [busqueda, setBusqueda] = useState("");
 
@@ -128,11 +133,12 @@ export default function RegistroDia() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .select("nombre_completo")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
+      if (error) setErrorPerfil(`No se pudo cargar el perfil: ${error.message}`);
       setNombreEncargada(data?.nombre_completo ?? user.email ?? "");
     }
     cargarPerfil();
@@ -140,27 +146,34 @@ export default function RegistroDia() {
   }, []);
 
   async function cargarFechas() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("registros")
       .select("fecha")
       .order("fecha", { ascending: false });
 
-    if (data) {
-      const unicas = Array.from(new Set(data.map((r) => r.fecha)));
-      setFechasConDatos(unicas.includes(todayISO()) ? unicas : [todayISO(), ...unicas]);
-    } else {
-      setFechasConDatos([todayISO()]);
+    if (error) {
+      setErrorFechas(`No se pudieron cargar las fechas de registros: ${error.message}`);
+      return;
     }
+
+    setErrorFechas(null);
+    const unicas = Array.from(new Set((data ?? []).map((r) => r.fecha)));
+    setFechasConDatos(unicas.includes(todayISO()) ? unicas : [todayISO(), ...unicas]);
   }
 
   async function cargarRegistros(f: string) {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("registros")
       .select("*")
       .eq("fecha", f)
       .order("numero", { ascending: true, nullsFirst: false });
-    setRegistros(data ?? []);
+    if (error) {
+      setErrorRegistros(`No se pudieron cargar los registros: ${error.message}`);
+    } else {
+      setRegistros(data ?? []);
+      setErrorRegistros(null);
+    }
     setLoading(false);
   }
 
@@ -207,6 +220,7 @@ export default function RegistroDia() {
     campo: keyof Registro,
     valor: string | number | string[] | null
   ) {
+    if (!canOperate) return;
     const registro = registros.find((item) => item.id === id);
     const servicios = registro ? serviciosDeEquipos(equiposDelRegistro(registro)) : [];
     setRegistros((prev) =>
@@ -225,6 +239,7 @@ export default function RegistroDia() {
   }
 
   async function actualizarEquipos(id: string, equipos: EquipoRegistro[]) {
+    if (!canOperate) return;
     const registro = registros.find((item) => item.id === id);
     if (!registro) return;
     if (!equiposTienenDetalleOtros(equipos)) {
@@ -265,6 +280,7 @@ export default function RegistroDia() {
   }
 
   async function actualizarCantidadEquipos(id: string, valor: number) {
+    if (!canOperate) return;
     const cantidadEquipos = Math.max(1, Math.floor(valor) || 1);
     const registro = registros.find((item) => item.id === id);
     if (!registro) return;
@@ -276,6 +292,7 @@ export default function RegistroDia() {
   }
 
   async function actualizarEquipo(id: string, indice: number, cambios: Partial<EquipoRegistro>) {
+    if (!canOperate) return;
     const registro = registros.find((item) => item.id === id);
     if (!registro) return;
     const equipos = equiposDelRegistro(registro).map((equipo, equipoIndice) =>
@@ -293,6 +310,7 @@ export default function RegistroDia() {
   }
 
   async function actualizarPago(id: string, estadoPago: EstadoPago) {
+    if (!canOperate) return;
     const registro = registros.find((item) => item.id === id);
     if (estadoPago === "Pagado" && !registro?.metodo_pago) {
       setMensajeExcel("Selecciona Efectivo o QR antes de marcar el pago como Pagado.");
@@ -313,6 +331,7 @@ export default function RegistroDia() {
   }
 
   async function actualizarEntrega(id: string, estadoEntrega: EstadoEntrega) {
+    if (!canOperate) return;
     const fechaEntrega = estadoEntrega === "Entregado" ? todayISO() : null;
     setRegistros((prev) =>
       prev.map((r) => (r.id === id ? { ...r, estado_entrega: estadoEntrega, fecha_entrega: fechaEntrega } : r))
@@ -330,6 +349,7 @@ export default function RegistroDia() {
   }
 
   async function agregarFila() {
+    if (!canOperate) return;
     const nuevoRegistro = {
       fecha,
       cantidad_equipos: 1,
@@ -380,13 +400,25 @@ export default function RegistroDia() {
   }
 
   async function borrarFila(id: string) {
+    if (!isAdmin) return;
     if (!confirm("¿Eliminar este registro?")) return;
-    setRegistros((prev) => prev.filter((r) => r.id !== id));
-    const { error } = await supabase.from("registros").delete().eq("id", id);
+
+    const { data, error } = await supabase
+      .from("registros")
+      .delete()
+      .eq("id", id)
+      .select("id");
     if (error) {
       setMensajeExcel(`No se pudo eliminar el registro: ${error.message}`);
-      await cargarRegistros(fecha);
+      return;
     }
+    if (!data || data.length === 0) {
+      setMensajeExcel("No se eliminó el registro. Puede que ya no exista o que tu usuario no tenga permisos.");
+      return;
+    }
+
+    setRegistros((prev) => prev.filter((r) => r.id !== id));
+    setMensajeExcel("Registro eliminado correctamente.");
   }
 
   function exportarExcel() {
@@ -438,6 +470,7 @@ export default function RegistroDia() {
   }
 
   async function confirmarImportacion() {
+    if (!canOperate) return;
     if (!vistaPrevia) return;
     setImportando(true);
     const { data, error } = await supabase.from("registros").insert(vistaPrevia).select();
@@ -453,6 +486,7 @@ export default function RegistroDia() {
   }
 
   async function importarExcel(event: React.ChangeEvent<HTMLInputElement>) {
+    if (!canOperate) return;
     const archivo = event.target.files?.[0];
     event.target.value = "";
     if (!archivo) return;
@@ -565,16 +599,16 @@ export default function RegistroDia() {
             aria-label="Fecha de la jornada"
             className="rounded-lg border border-[var(--color-line)] px-3 py-2 text-sm"
           />
-          <button
+          {canOperate && <button
             onClick={agregarFila}
             className="day-add-button rounded-lg bg-[var(--color-navy-800)] text-white text-sm font-medium px-4 py-2 hover:bg-[var(--color-navy-900)] transition-colors"
           >
             + Agregar registro
-          </button>
-          <label className="cursor-pointer rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm font-medium hover:bg-[var(--color-navy-50)]">
+          </button>}
+          {canOperate && <label className="cursor-pointer rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm font-medium hover:bg-[var(--color-navy-50)]">
             {importando ? "Importando…" : "Importar Excel"}
             <input type="file" accept=".xlsx,.xls" onChange={importarExcel} disabled={importando} className="sr-only" />
-          </label>
+          </label>}
           <button
             onClick={descargarPlantilla}
             className="rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm font-medium hover:bg-[var(--color-navy-50)]"
@@ -596,8 +630,18 @@ export default function RegistroDia() {
           {mensajeExcel}
         </p>
       )}
+      {(errorPerfil || errorFechas || errorRegistros) && (
+        <p role="alert" className="mb-4 rounded-lg bg-[var(--color-pending-bg)] px-3 py-2 text-sm text-[var(--color-pending)]">
+          {[errorPerfil, errorFechas, errorRegistros].filter(Boolean).join(" ")}
+        </p>
+      )}
+      {roleError && (
+        <p role="alert" className="mb-4 rounded-lg bg-[var(--color-pending-bg)] px-3 py-2 text-sm text-[var(--color-pending)]">
+          No se pudo verificar el rol: {roleError}
+        </p>
+      )}
 
-      {vistaPrevia && (
+      {vistaPrevia && canOperate && (
         <div className="mb-6 rounded-xl border border-[var(--color-navy-100)] bg-white p-4 shadow-sm">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -703,14 +747,15 @@ export default function RegistroDia() {
         </span>
       </div>
 
+      <fieldset disabled={!canOperate} className="min-w-0 border-0 p-0">
       <section className="day-mobile-records space-y-3 sm:hidden" aria-label="Registros del día">
         {loading ? (
           <div className="day-empty-state">Cargando registros…</div>
         ) : registros.length === 0 ? (
           <div className="day-empty-state">
             <span className="day-empty-icon" aria-hidden="true">▤</span>
-            <h2>Sin registros todavía</h2>
-            <p>Usa <strong>Agregar registro</strong> para comenzar la jornada.</p>
+            <h2>{errorRegistros ? "No se pudieron cargar los registros" : "Sin registros todavía"}</h2>
+            {!errorRegistros && <p>Usa <strong>Agregar registro</strong> para comenzar la jornada.</p>}
           </div>
         ) : registrosFiltrados.length === 0 ? (
           <div className="day-empty-state">No se encontraron registros con “{busqueda}”.</div>
@@ -869,7 +914,7 @@ export default function RegistroDia() {
                   <div className="day-card-actions">
                     {r.celular && <a href={`tel:${r.celular}`}>☎ Contactar</a>}
                     <span>{savingId === r.id ? "Guardando…" : "Los cambios se guardan al salir del campo."}</span>
-                    <button type="button" onClick={() => borrarFila(r.id)}>Eliminar registro</button>
+                    {isAdmin && <button type="button" onClick={() => borrarFila(r.id)}>Eliminar registro</button>}
                   </div>
                 </details>
               </article>
@@ -904,8 +949,10 @@ export default function RegistroDia() {
               {!loading && registros.length === 0 && (
                 <tr>
                     <td colSpan={13} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
-                    Todavía no hay registros para este día. Usa &ldquo;Agregar registro&rdquo;.
-                  </td>
+                      {errorRegistros
+                        ? "No se muestran registros porque falló la consulta."
+                        : "Todavía no hay registros para este día. Usa “Agregar registro”."}
+                    </td>
                 </tr>
               )}
               {!loading && registros.length > 0 && registrosFiltrados.length === 0 && (
@@ -1081,13 +1128,13 @@ export default function RegistroDia() {
                     />
                   </td>
                   <td className="px-2 py-1 text-right">
-                    <button
+                    {isAdmin && <button
                       onClick={() => borrarFila(r.id)}
                       className="text-[var(--color-ink-soft)] hover:text-[var(--color-pending)] text-xs"
                       title="Eliminar"
                     >
                       Borrar
-                    </button>
+                    </button>}
                   </td>
                 </tr>
               ))}
@@ -1096,6 +1143,7 @@ export default function RegistroDia() {
         </div>
       </div>
 
+      </fieldset>
       {savingId && (
         <p className="text-xs text-[var(--color-ink-soft)] mt-2">Guardando…</p>
       )}

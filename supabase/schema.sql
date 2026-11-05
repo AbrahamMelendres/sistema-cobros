@@ -1,3 +1,4 @@
+-- NO ejecutar sobre una base con permisos por rol: contiene políticas permisivas que los anulan.
 -- Esquema del proyecto Supabase "sistema-cobros"
 -- Ya aplicado en el proyecto: https://cxhejiygwmxvneicermw.supabase.co
 -- Este archivo queda como referencia / para reproducirlo en otro entorno.

@@ -134,16 +134,48 @@ export default function InformeCajaDashboard() {
     setLoading(true);
     setError(null);
 
-    let movimientosQuery = supabase
-      .from("movimientos")
-      .select("id, fecha, actividad_id, responsable_id, tipo, concepto, monto, metodo_pago, actividad:actividades(nombre), responsable:responsables(nombre)")
-      .gte("fecha", rango.inicio)
-      .lte("fecha", rango.fin);
-    let pendientesQuery = supabase
-      .from("pendientes")
-      .select("descripcion, monto, estado, fecha_registro, actividad:actividades(nombre), responsable:responsables(nombre)")
-      .gte("fecha_registro", rango.inicio)
-      .lte("fecha_registro", rango.fin);
+    const cargarMovimientosDelPeriodo = async () => {
+      const resultados: Movimiento[] = [];
+      const tamanoPagina = 1000;
+
+      for (let desde = 0; ; desde += tamanoPagina) {
+        let query = supabase
+          .from("movimientos")
+          .select("id, fecha, actividad_id, responsable_id, tipo, concepto, monto, metodo_pago, actividad:actividades(nombre), responsable:responsables(nombre)")
+          .gte("fecha", rango.inicio)
+          .lte("fecha", rango.fin);
+        if (actividadId) query = query.eq("actividad_id", actividadId);
+        if (responsableId) query = query.eq("responsable_id", responsableId);
+
+        const { data, error } = await query.order("id").range(desde, desde + tamanoPagina - 1);
+        if (error) return { data: null, error };
+
+        const pagina = (data ?? []) as Movimiento[];
+        resultados.push(...pagina);
+        if (pagina.length < tamanoPagina) return { data: resultados, error: null };
+      }
+    };
+    const cargarPendientesDelPeriodo = async () => {
+      const resultados: Pendiente[] = [];
+      const tamanoPagina = 1000;
+
+      for (let desde = 0; ; desde += tamanoPagina) {
+        let query = supabase
+          .from("pendientes")
+          .select("descripcion, monto, estado, fecha_registro, actividad:actividades(nombre), responsable:responsables(nombre)")
+          .gte("fecha_registro", rango.inicio)
+          .lte("fecha_registro", rango.fin);
+        if (actividadId) query = query.eq("actividad_id", actividadId);
+        if (responsableId) query = query.eq("responsable_id", responsableId);
+
+        const { data, error } = await query.order("id").range(desde, desde + tamanoPagina - 1);
+        if (error) return { data: null, error };
+
+        const pagina = (data ?? []) as Pendiente[];
+        resultados.push(...pagina);
+        if (pagina.length < tamanoPagina) return { data: resultados, error: null };
+      }
+    };
     const cargarMovimientosAnteriores = async () => {
       const anteriores: Pick<Movimiento, "tipo" | "monto">[] = [];
       const tamanoPagina = 1000;
@@ -165,18 +197,9 @@ export default function InformeCajaDashboard() {
       }
     };
 
-    if (actividadId) {
-      movimientosQuery = movimientosQuery.eq("actividad_id", actividadId);
-      pendientesQuery = pendientesQuery.eq("actividad_id", actividadId);
-    }
-    if (responsableId) {
-      movimientosQuery = movimientosQuery.eq("responsable_id", responsableId);
-      pendientesQuery = pendientesQuery.eq("responsable_id", responsableId);
-    }
-
     const [movimientosResult, pendientesResult, movimientosAnterioresResult, catalogosResult] = await Promise.all([
-      movimientosQuery,
-      pendientesQuery,
+      cargarMovimientosDelPeriodo(),
+      cargarPendientesDelPeriodo(),
       cargarMovimientosAnteriores(),
       Promise.all([
         supabase.from("actividades").select("id, nombre").eq("activa", true).order("nombre"),
@@ -192,7 +215,7 @@ export default function InformeCajaDashboard() {
       return;
     }
 
-    const movimientosFiltrados = (movimientosResult.data ?? []) as Movimiento[];
+    const movimientosFiltrados = movimientosResult.data ?? [];
     const fondosAnterioresCalculados = (movimientosAnterioresResult.data ?? []).reduce(
       (total, movimiento) => total + (movimiento.tipo === "Ingreso" ? 1 : -1) * (Number(movimiento.monto) || 0),
       0,
@@ -232,7 +255,7 @@ export default function InformeCajaDashboard() {
     setFondosAnteriores(fondosAnterioresCalculados);
     setResumenActividades(Array.from(actividadesAgrupadas.values()));
     setResumenResponsables(Array.from(responsablesAgrupados.values()));
-    setPendientes((pendientesResult.data ?? []) as Pendiente[]);
+    setPendientes(pendientesResult.data ?? []);
     setActividades(catalogosResult[0].data ?? []);
     setResponsables(catalogosResult[1].data ?? []);
     setLoading(false);

@@ -10,7 +10,7 @@ const resumenInicial: ResumenCaja = {
   total_egresos: 0,
   pendientes_por_pagar: 0,
   saldo_actual: 0,
-  saldo_neto_despues_pendientes: 0,
+  saldo_neto: 0,
 };
 
 function formatoMoneda(valor: number) {
@@ -60,12 +60,14 @@ export default function CajaResumen() {
     { label: "Ingresos", detalle: "Total acumulado", valor: resumen.total_ingresos, tono: "ok" },
     { label: "Egresos", detalle: "Total acumulado", valor: resumen.total_egresos },
     { label: "Pendientes", detalle: "Por pagar", valor: resumen.pendientes_por_pagar, tono: "pending" },
-    { label: "Saldo neto", detalle: "Después de pendientes", valor: resumen.saldo_neto_despues_pendientes },
+    { label: "Saldo neto", detalle: "Después de pendientes", valor: resumen.saldo_neto },
   ];
   const saldoNetoEsperado =
-    Number(resumen.saldo_actual) - Number(resumen.pendientes_por_pagar);
+    Number(resumen.total_ingresos) -
+    Number(resumen.total_egresos) -
+    Number(resumen.pendientes_por_pagar);
   const diferenciaSaldoNeto =
-    Math.abs(Number(resumen.saldo_neto_despues_pendientes) - saldoNetoEsperado) > 0.01;
+    Math.abs(Number(resumen.saldo_neto) - saldoNetoEsperado) > 0.01;
   const responsablesVisibles = mostrarSaldosCero
     ? responsables
     : responsables.filter((item) => Math.abs(Number(item.dinero_bajo_responsabilidad) || 0) > 0.005);
@@ -114,7 +116,7 @@ export default function CajaResumen() {
         <>
           {diferenciaSaldoNeto && (
             <p role="status" className="mb-4 rounded-lg border border-[var(--color-pending)] bg-[var(--color-pending-bg)] px-3 py-2 text-sm text-[var(--color-pending)]">
-              Revisa el resumen: el saldo neto informado ({formatoMoneda(Number(resumen.saldo_neto_despues_pendientes) || 0)}) no coincide con saldo actual menos pendientes ({formatoMoneda(saldoNetoEsperado)}).
+              Revisa el resumen: el saldo neto informado ({formatoMoneda(Number(resumen.saldo_neto) || 0)}) no coincide con ingresos menos egresos y pendientes por pagar ({formatoMoneda(saldoNetoEsperado)}).
             </p>
           )}
 

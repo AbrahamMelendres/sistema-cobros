@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useUserRole } from "@/hooks/useUserRole";
 import SelectConCrear from "@/components/SelectConCrear";
 import type { ResumenResponsable } from "@/lib/types";
 
@@ -42,8 +43,8 @@ function nombreResponsable(relacion: { nombre: string }[] | null | undefined) {
 
 export default function CustodiaPanel() {
   const supabase = useMemo(() => createClient(), []);
+  const { isAdmin, error: roleError } = useUserRole(supabase);
   const [responsables, setResponsables] = useState<Responsable[]>([]);
-  const [puedeCrear, setPuedeCrear] = useState(false);
   const [saldos, setSaldos] = useState<ResumenResponsable[]>([]);
   const [movimientos, setMovimientos] = useState<MovimientoCustodia[]>([]);
   const [responsableId, setResponsableId] = useState("");
@@ -64,7 +65,7 @@ export default function CustodiaPanel() {
     setLoading(true);
     setError(null);
 
-    const [responsablesResult, saldosResult, movimientosResult, rolResult] = await Promise.all([
+    const [responsablesResult, saldosResult, movimientosResult] = await Promise.all([
       supabase
         .from("responsables")
         .select("id, nombre")
@@ -78,7 +79,6 @@ export default function CustodiaPanel() {
         .from("custodia_movimientos")
         .select("id, responsable_id, tipo, monto, fecha, observaciones, responsable:responsables(nombre)")
         .order("fecha", { ascending: false }),
-      supabase.rpc("es_administrador"),
     ]);
 
     const primerError = responsablesResult.error ?? saldosResult.error ?? movimientosResult.error;
@@ -89,12 +89,8 @@ export default function CustodiaPanel() {
     }
 
     setResponsables(responsablesResult.data ?? []);
-    setPuedeCrear(rolResult.data === true);
     setSaldos(saldosResult.data ?? []);
     setMovimientos((movimientosResult.data ?? []) as MovimientoCustodia[]);
-    if (rolResult.error) {
-      setError(`No se pudo verificar el permiso de administración: ${rolResult.error.message}`);
-    }
     setLoading(false);
   }
 
@@ -117,6 +113,7 @@ export default function CustodiaPanel() {
 
   async function registrarMovimiento(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!isAdmin) return;
     setError(null);
     setMensaje(null);
 
@@ -152,6 +149,7 @@ export default function CustodiaPanel() {
   }
 
   async function eliminarMovimiento(movimiento: MovimientoCustodia) {
+    if (!isAdmin) return;
     const confirmado = window.confirm(
       `¿Eliminar permanentemente la ${movimiento.tipo.toLowerCase()} de ${formatoMoneda(Number(movimiento.monto) || 0)} de ${nombreResponsable(movimiento.responsable)}? Esta acción no se puede deshacer.`
     );
@@ -233,11 +231,16 @@ export default function CustodiaPanel() {
       {error && (
         <p className="mb-4 rounded-lg bg-[var(--color-pending-bg)] px-3 py-2 text-sm text-[var(--color-pending)]">{error}</p>
       )}
+      {roleError && (
+        <p role="alert" className="mb-4 rounded-lg bg-[var(--color-pending-bg)] px-3 py-2 text-sm text-[var(--color-pending)]">
+          No se pudo verificar el rol: {roleError}
+        </p>
+      )}
       {mensaje && (
         <p className="mb-4 rounded-lg bg-[var(--color-ok-bg)] px-3 py-2 text-sm text-[var(--color-ok)]">{mensaje}</p>
       )}
 
-      <section className="mb-8 rounded-xl border border-[var(--color-line)] bg-white p-5 shadow-sm sm:p-6">
+      {isAdmin && <section className="mb-8 rounded-xl border border-[var(--color-line)] bg-white p-5 shadow-sm sm:p-6">
         <h2 className="mb-4 font-display text-lg font-semibold text-[var(--color-ink)]">Registrar movimiento de custodia</h2>
         <form onSubmit={registrarMovimiento} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="block text-xs font-medium text-[var(--color-ink-soft)]">
@@ -247,7 +250,7 @@ export default function CustodiaPanel() {
               valor={responsableId}
               onChange={setResponsableId}
               onCrear={crearResponsable}
-              puedeCrear={puedeCrear}
+              puedeCrear={isAdmin}
               required
               disabled={loading || guardando}
               placeholder="Selecciona un responsable"
@@ -318,7 +321,7 @@ export default function CustodiaPanel() {
             </button>
           </div>
         </form>
-      </section>
+      </section>}
 
       <section className="overflow-hidden rounded-xl border border-[var(--color-line)] bg-white">
         <div className="border-b border-[var(--color-line)] px-4 py-4">
@@ -383,14 +386,14 @@ export default function CustodiaPanel() {
                 <th className="px-4 py-2.5 text-right font-medium text-[var(--color-ink-soft)]">Monto</th>
                 <th className="px-4 py-2.5 text-left font-medium text-[var(--color-ink-soft)]">Fecha</th>
                 <th className="px-4 py-2.5 text-left font-medium text-[var(--color-ink-soft)]">Observaciones</th>
-                {puedeCrear && <th className="px-4 py-2.5 text-right font-medium text-[var(--color-ink-soft)]">Acciones</th>}
+                {isAdmin && <th className="px-4 py-2.5 text-right font-medium text-[var(--color-ink-soft)]">Acciones</th>}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={puedeCrear ? 6 : 5} className="px-4 py-8 text-center text-[var(--color-ink-soft)]">Cargando historial…</td></tr>
+                <tr><td colSpan={isAdmin ? 6 : 5} className="px-4 py-8 text-center text-[var(--color-ink-soft)]">Cargando historial…</td></tr>
               ) : movimientosFiltrados.length === 0 ? (
-                <tr><td colSpan={puedeCrear ? 6 : 5} className="px-4 py-8 text-center text-[var(--color-ink-soft)]">{movimientos.length === 0 ? "Aún no hay movimientos de custodia." : "No hay movimientos con esos filtros."}</td></tr>
+                <tr><td colSpan={isAdmin ? 6 : 5} className="px-4 py-8 text-center text-[var(--color-ink-soft)]">{movimientos.length === 0 ? "Aún no hay movimientos de custodia." : "No hay movimientos con esos filtros."}</td></tr>
               ) : (
                 movimientosFiltrados.map((movimiento) => (
                   <tr key={movimiento.id} className="border-b border-[var(--color-line)] last:border-0">
@@ -399,7 +402,7 @@ export default function CustodiaPanel() {
                     <td className="px-4 py-2.5 text-right font-medium">{formatoMoneda(Number(movimiento.monto) || 0)}</td>
                     <td className="px-4 py-2.5 whitespace-nowrap">{movimiento.fecha}</td>
                     <td className="px-4 py-2.5 text-[var(--color-ink-soft)]">{movimiento.observaciones || "—"}</td>
-                    {puedeCrear && (
+                    {isAdmin && (
                       <td className="px-4 py-2.5 text-right">
                         <button
                           type="button"

@@ -57,15 +57,35 @@ export default function InformeDashboard() {
   const supabase = useMemo(() => createClient(), []);
   const [todos, setTodos] = useState<Registro[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [periodo, setPeriodo] = useState<Periodo>("dia");
   const [fechaReferencia, setFechaReferencia] = useState(() => fechaLocalISO(new Date()));
 
   async function cargar() {
-    const { data } = await supabase
-      .from("registros")
-      .select("*")
-      .order("fecha", { ascending: false });
-    setTodos(data ?? []);
+    setLoading(true);
+    setError(null);
+    const registros: Registro[] = [];
+    const tamanoPagina = 1000;
+
+    for (let desde = 0; ; desde += tamanoPagina) {
+      const { data, error: queryError } = await supabase
+        .from("registros")
+        .select("*")
+        .order("fecha", { ascending: false })
+        .order("id")
+        .range(desde, desde + tamanoPagina - 1);
+      if (queryError) {
+        setError(`No se pudieron cargar los registros del informe: ${queryError.message}`);
+        setLoading(false);
+        return;
+      }
+
+      const pagina = (data ?? []) as Registro[];
+      registros.push(...pagina);
+      if (pagina.length < tamanoPagina) break;
+    }
+
+    setTodos(registros);
     setLoading(false);
   }
 
@@ -233,6 +253,12 @@ export default function InformeDashboard() {
         </div>
       </div>
 
+      {error && (
+        <p role="alert" className="mb-4 rounded-lg bg-[var(--color-pending-bg)] px-3 py-2 text-sm text-[var(--color-pending)]">
+          {error}
+        </p>
+      )}
+
       <div className="no-print mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-[var(--color-line)] bg-white p-3">
         <div>
           <span className="mb-1.5 block text-xs font-medium text-[var(--color-ink-soft)]">Período del informe</span>
@@ -334,7 +360,7 @@ export default function InformeDashboard() {
               {!loading && porDia.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-3 py-8 text-center text-[var(--color-ink-soft)]">
-                    Aún no hay datos registrados.
+                    {error ? "No se muestran datos porque falló la consulta." : "Aún no hay datos registrados."}
                   </td>
                 </tr>
               )}

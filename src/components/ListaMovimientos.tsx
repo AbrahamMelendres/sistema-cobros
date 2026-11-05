@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useUserRole } from "@/hooks/useUserRole";
 
 interface Movimiento {
   id: string;
@@ -33,14 +34,12 @@ function fechaLocalISO() {
 
 export default function ListaMovimientos() {
   const supabase = useMemo(() => createClient(), []);
+  const { isAdmin: administrador, loading: verificandoRol, error: roleError } = useUserRole(supabase);
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportando, setExportando] = useState(false);
-  const [administrador, setAdministrador] = useState(false);
-  const [verificandoRol, setVerificandoRol] = useState(true);
   const [eliminandoId, setEliminandoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [aviso, setAviso] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
 
   async function exportarExcel() {
@@ -106,18 +105,6 @@ export default function ListaMovimientos() {
 
   useEffect(() => {
     void cargarMovimientos(true);
-
-    async function verificarAdministrador() {
-      const { data, error: roleError } = await supabase.rpc("es_administrador");
-      if (roleError) {
-        setAviso(`No se pudo verificar el permiso para eliminar movimientos: ${roleError.message}`);
-      } else {
-        setAdministrador(data === true);
-      }
-      setVerificandoRol(false);
-    }
-
-    void verificarAdministrador();
 
     const channel = supabase
       .channel("lista-movimientos")
@@ -191,9 +178,9 @@ export default function ListaMovimientos() {
           {error}
         </p>
       )}
-      {aviso && (
-        <p role="status" className="m-4 rounded-lg bg-[var(--color-pending-bg)] px-3 py-2 text-sm text-[var(--color-pending)]">
-          {aviso}
+      {roleError && (
+        <p role="alert" className="m-4 rounded-lg bg-[var(--color-pending-bg)] px-3 py-2 text-sm text-[var(--color-pending)]">
+          No se pudo verificar el rol: {roleError}
         </p>
       )}
       {mensaje && (

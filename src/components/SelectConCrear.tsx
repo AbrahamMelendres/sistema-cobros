@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useState } from "react";
 
 export interface OpcionSelectConCrear {
   id: string;
@@ -33,29 +32,11 @@ export default function SelectConCrear({
   disabled = false,
   ariaLabel,
 }: SelectConCrearProps) {
-  const supabase = useMemo(() => createClient(), []);
   const [creando, setCreando] = useState(false);
   const [nombre, setNombre] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
-  const [puedeCrear, setPuedeCrear] = useState(Boolean(puedeCrearProp));
-
-  useEffect(() => {
-    async function verificarPermiso() {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) {
-        setPuedeCrear(false);
-        return;
-      }
-
-      const { data } = await supabase.rpc("es_administrador");
-      setPuedeCrear(data === true);
-    }
-
-    void verificarPermiso();
-  }, [supabase]);
-
-  const puedeCrearActual = puedeCrearProp || puedeCrear;
+  const puedeCrearActual = Boolean(puedeCrearProp);
 
   function cancelar() {
     setCreando(false);
