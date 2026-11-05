@@ -39,7 +39,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center bg-[var(--color-navy-950)] px-4">
+    <div className="login-screen min-h-screen grid place-items-center px-4">
       <div className="w-full max-w-sm">
         <div className="flex justify-center mb-8">
           <Image
@@ -52,7 +52,7 @@ export default function LoginPage() {
           />
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl px-8 py-9">
+        <div className="login-card rounded-2xl px-8 py-9">
           <h1 className="font-display text-xl font-semibold text-[var(--color-ink)] text-center mb-1">
             Registro de Cobros
           </h1>
@@ -74,7 +74,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-[var(--color-line)] px-3 py-2.5 text-sm text-[var(--color-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--color-navy-700)] focus:border-transparent"
+                className="login-field w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-navy-700)] focus:border-transparent"
                 placeholder="tu.nombre@academiatecnica.local"
               />
             </div>
@@ -92,7 +92,7 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-[var(--color-line)] px-3 py-2.5 text-sm text-[var(--color-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--color-navy-700)] focus:border-transparent"
+                className="login-field w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-navy-700)] focus:border-transparent"
                 placeholder="••••••••"
               />
             </div>
@@ -106,7 +106,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg bg-[var(--color-navy-800)] text-white text-sm font-medium py-2.5 hover:bg-[var(--color-navy-900)] transition-colors disabled:opacity-60"
+              className="login-submit w-full rounded-lg text-white text-sm font-medium py-2.5 transition-colors disabled:opacity-60"
             >
               {loading ? "Ingresando…" : "Iniciar sesión"}
             </button>

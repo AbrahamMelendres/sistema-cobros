@@ -54,6 +54,133 @@ body {
   letter-spacing: -0.01em;
 }
 
+.app-theme {
+  --color-navy-950: #061326;
+  --color-navy-900: #091b34;
+  --color-navy-800: #0c2d52;
+  --color-navy-700: #2478bd;
+  --color-navy-100: rgb(47 123 190 / 18%);
+  --color-navy-50: rgb(34 91 145 / 16%);
+  --color-paper: #071629;
+  --color-ink: #e8f2ff;
+  --color-ink-soft: #a9bfd8;
+  --color-line: rgb(140 184 224 / 24%);
+  --color-ok: #5bd6a0;
+  --color-ok-bg: rgb(35 148 105 / 18%);
+  --color-pending: #ffb36b;
+  --color-pending-bg: rgb(197 105 36 / 18%);
+
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  color: var(--color-ink);
+  background-color: var(--color-paper);
+  background-image:
+    radial-gradient(ellipse at 12% 0%, rgb(29 111 180 / 22%), transparent 42%),
+    radial-gradient(ellipse at 88% 12%, rgb(17 75 132 / 20%), transparent 36%),
+    linear-gradient(rgb(66 130 187 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(66 130 187 / 5%) 1px, transparent 1px);
+  background-size: auto, auto, 40px 40px, 40px 40px;
+}
+
+.app-theme header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  border-color: var(--color-line);
+  background: rgb(5 20 39 / 86%);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 18%);
+  backdrop-filter: blur(18px);
+}
+
+.app-theme .bg-white {
+  border-color: var(--color-line);
+  background-color: rgb(12 34 59 / 82%);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 14%);
+  backdrop-filter: blur(16px);
+}
+
+.app-theme input:not([type="checkbox"]),
+.app-theme select,
+.app-theme textarea {
+  border-color: var(--color-line);
+  background-color: rgb(5 20 39 / 72%);
+  color: var(--color-ink);
+}
+
+.app-theme option {
+  background-color: #0b2039;
+  color: var(--color-ink);
+}
+
+.app-theme input::placeholder,
+.app-theme textarea::placeholder {
+  color: var(--color-ink-soft);
+  opacity: 0.8;
+}
+
+.app-theme button:focus-visible,
+.app-theme a:focus-visible,
+.app-theme input:focus-visible,
+.app-theme select:focus-visible,
+.app-theme textarea:focus-visible {
+  outline: 2px solid #65baff;
+  outline-offset: 2px;
+}
+
+.login-screen {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background-color: #061326;
+  background-image:
+    radial-gradient(ellipse at 50% 42%, rgb(32 123 199 / 28%), transparent 34%),
+    radial-gradient(ellipse at 12% 10%, rgb(16 71 125 / 34%), transparent 40%),
+    radial-gradient(ellipse at 90% 85%, rgb(15 62 112 / 24%), transparent 42%),
+    linear-gradient(rgb(71 145 205 / 7%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(71 145 205 / 7%) 1px, transparent 1px);
+  background-size: auto, auto, auto, 44px 44px, 44px 44px;
+}
+
+.login-card {
+  border: 1px solid rgb(177 218 255 / 38%);
+  background: linear-gradient(145deg, rgb(117 157 194 / 25%), rgb(20 48 78 / 74%));
+  box-shadow:
+    0 24px 70px rgb(0 0 0 / 45%),
+    inset 0 1px 0 rgb(255 255 255 / 18%),
+    0 0 30px rgb(55 155 255 / 12%);
+  backdrop-filter: blur(24px);
+}
+
+.login-card h1,
+.login-card label {
+  color: #f0f7ff;
+}
+
+.login-card > p {
+  color: #bed0e3;
+}
+
+.login-card input {
+  border-color: rgb(190 219 246 / 28%);
+  background: rgb(4 18 35 / 42%);
+  color: #f0f7ff;
+}
+
+.login-card input::placeholder {
+  color: #aec1d6;
+}
+
+.login-submit {
+  border: 1px solid rgb(135 199 255 / 70%);
+  background: linear-gradient(110deg, #155a9b, #247fca 55%, #155a9b);
+  box-shadow: 0 0 18px rgb(68 165 255 / 34%), inset 0 1px 0 rgb(255 255 255 / 22%);
+}
+
+.login-submit:hover {
+  background: linear-gradient(110deg, #1d70b8, #3399e5 55%, #1d70b8);
+}
+
 h1, h2, h3, .font-display {
   font-family: var(--font-display);
   letter-spacing: -0.02em;
@@ -96,6 +223,8 @@ h1, h2, h3, .font-display {
     background: white;
     border-color: #d1d5db;
     box-shadow: none;
+    color: #10151f;
+    backdrop-filter: none;
   }
 
   .report-print-area table {

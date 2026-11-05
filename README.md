@@ -4,18 +4,9 @@ Academia Técnica de Ingeniería y Tecnologías Informáticas
 Sistema privado (con login) para registrar cobros diarios de reparación de equipos (Pc / Laptop) y ver un informe general en vivo.
 
 ## Stack
-- **Frontend + Backend:** Next.js 16 (App Router)
+- **Frontend + Backend:** Next.js 15.5 (App Router)
 - **Base de datos + Auth:** Supabase (Postgres + Auth + Row Level Security + Realtime)
 - **Deploy:** Vercel
-
-## Proyecto de Supabase
-Ya está creado y configurado: `sistema-cobros` (ID `cxhejiygwmxvneicermw`).
-- Tabla `registros`: los cobros diarios.
-- Tabla `profiles`: nombre completo asociado a cada usuario de login.
-- RLS activado: solo usuarios autenticados pueden leer/escribir.
-- Realtime activado en `registros` (el informe se actualiza solo).
-
-El esquema completo está en `supabase/schema.sql` (ya aplicado, es solo referencia).
 
 ## Desarrollo local
 
@@ -26,44 +17,53 @@ npm run dev
 
 Abre http://localhost:3000 — te redirige a `/login`.
 
-Las variables de entorno ya están en `.env.local` (URL y clave pública/anon de Supabase — son seguras de exponer en el frontend, no dan acceso administrativo).
+Configura `.env.local` en la raíz del proyecto con las credenciales del proyecto Supabase:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-clave-publica
+SUPABASE_SERVICE_ROLE_KEY=tu-clave-secreta-de-servidor
+```
+
+La clave `SUPABASE_SERVICE_ROLE_KEY` solo se usa en el servidor. No la compartas ni la incluyas en código del navegador. Los archivos `.env*` están ignorados por Git.
+
+Para producción, primero genera el build y luego inicia el servidor:
+
+```bash
+npm run build
+npm start
+```
 
 ## Usuarios
-Para crear un nuevo usuario (otra recepcionista):
-1. Panel de Supabase → Authentication → Users → **Add user** → Create new user.
-2. Activa "Auto Confirm User".
-3. Copia su UID y ejecuta en el SQL Editor de Supabase:
-   ```sql
-   insert into public.profiles (id, nombre_completo)
-   values ('<uid-del-usuario>', 'Nombre Completo');
-   ```
-
-**Usuario ya creado:**
-- Email: `maya.calderon@academiatecnica.local`
-- Contraseña temporal: `Maya2026Cobros!` (cámbiala después de tu primer ingreso, desde Authentication → Users → editar usuario, en el panel de Supabase)
+Los administradores pueden gestionar cuentas desde **Caja → Usuarios**. Asigna a cada persona el rol mínimo que necesite. No guardes contraseñas ni credenciales de prueba en este repositorio.
 
 ## Desplegar en Vercel
 
 1. Sube este proyecto a un repositorio de GitHub.
 2. En [vercel.com](https://vercel.com) → **Add New Project** → importa el repo (detecta Next.js automáticamente).
-3. En **Environment Variables**, agrega:
-   - `NEXT_PUBLIC_SUPABASE_URL` = `https://cxhejiygwmxvneicermw.supabase.co`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = (la que está en tu `.env.local`)
-4. Deploy. Cada push a `main` vuelve a desplegar automáticamente.
+3. En **Environment Variables**, configura las tres variables descritas arriba para cada entorno. La clave secreta debe quedar como variable de servidor, nunca con prefijo `NEXT_PUBLIC_`.
+4. Despliega. Cada push a la rama configurada puede iniciar un nuevo despliegue.
+
+## Base de datos
+
+- `supabase/schema.sql` contiene el esquema base de cobros y perfiles; no representa por sí solo todos los módulos y políticas actuales.
+- Revisa y aplica las migraciones de `supabase/migrations/` en el proyecto correcto antes de depender de funciones como roles y bitácora.
+- La bitácora empieza a registrar cambios después de aplicar su migración; no crea historial retroactivo.
 
 ## Estructura
 ```
 src/
   app/
-    login/            -> pantalla de inicio de sesión
-    (protected)/
-      dia/             -> registro de cobros por día (tabla editable)
-      informe/         -> dashboard en vivo (totales, por día)
-  components/          -> Navbar, RegistroDia, InformeDashboard
+    login/              -> pantalla de inicio de sesión
+    (protected)/        -> páginas que requieren sesión
+    api/admin/          -> operaciones de administración de usuarios
+  components/          -> formularios, caja, informes y bitácora
   lib/
-    supabase/          -> clientes de Supabase (browser, server, middleware)
-    types.ts           -> tipos de datos de "registros"
-  proxy.ts              -> protege rutas: si no hay sesión, redirige a /login
+    supabase/           -> clientes de Supabase (navegador, servidor y middleware)
+    types.ts            -> tipos compartidos
+  proxy.ts              -> actualiza/verifica la sesión
+supabase/
+  migrations/           -> cambios versionados de base de datos
 public/
-  logo.jpeg            -> escudo de la Academia Técnica
+  logo.jpeg             -> escudo de la Academia Técnica
 ```

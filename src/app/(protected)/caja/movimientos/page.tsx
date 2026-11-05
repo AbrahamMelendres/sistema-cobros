@@ -1,5 +1,6 @@
 import CargaRapidaMovimientos from "@/components/CargaRapidaMovimientos";
 import FormularioMovimiento from "@/components/FormularioMovimiento";
+import ListaMovimientos from "@/components/ListaMovimientos";
 
 // TODO: crear componentes.
 export default function MovimientosPage() {
@@ -7,6 +8,7 @@ export default function MovimientosPage() {
     <>
       <FormularioMovimiento />
       <CargaRapidaMovimientos />
+      <ListaMovimientos />
     </>
   );
 }

@@ -10,6 +10,7 @@ export default function Navbar({ nombre }: { nombre: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const [cajaAbierta, setCajaAbierta] = useState(false);
+  const [informesAbiertos, setInformesAbiertos] = useState(false);
   const [esAdministrador, setEsAdministrador] = useState(false);
 
   async function handleLogout() {
@@ -38,6 +39,7 @@ export default function Navbar({ nombre }: { nombre: string }) {
         ? "bg-[var(--color-navy-800)] text-white"
         : "text-[var(--color-ink-soft)] hover:bg-[var(--color-navy-100)]"
     }`;
+  const informeActivo = pathname === "/informe" || pathname === "/caja/informes";
 
   return (
     <header className="border-b border-[var(--color-line)] bg-white">
@@ -84,8 +86,9 @@ export default function Navbar({ nombre }: { nombre: string }) {
                   ["Movimientos", "/caja/movimientos"],
                   ["Custodia", "/caja/custodia"],
                   ["Pendientes", "/caja/pendientes"],
-                  ["Informes", "/caja/informes"],
-                  ...(esAdministrador ? [["Usuarios", "/caja/usuarios"], ["Catálogos", "/caja/catalogos"]] : []),
+                  ...(esAdministrador
+                    ? [["Usuarios", "/caja/usuarios"], ["Catálogos", "/caja/catalogos"], ["Bitácora", "/caja/bitacora"]]
+                    : []),
                 ].map(([label, href]) => (
                   <Link
                     key={href}
@@ -104,9 +107,46 @@ export default function Navbar({ nombre }: { nombre: string }) {
               </div>
             )}
           </div>
-          <Link href="/informe" className={linkClass("/informe")}>
-            Informe
-          </Link>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setInformesAbiertos((abiertos) => !abiertos)}
+              aria-haspopup="menu"
+              aria-expanded={informesAbiertos}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                informeActivo
+                  ? "bg-[var(--color-navy-800)] text-white"
+                  : "text-[var(--color-ink-soft)] hover:bg-[var(--color-navy-100)]"
+              }`}
+            >
+              Informes <span className="ml-1 text-xs">▾</span>
+            </button>
+            {informesAbiertos && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full z-20 mt-2 w-52 rounded-lg border border-[var(--color-line)] bg-white p-1 shadow-lg"
+              >
+                {[
+                  ["Cobros", "/informe"],
+                  ["Caja", "/caja/informes"],
+                ].map(([label, href]) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    role="menuitem"
+                    onClick={() => setInformesAbiertos(false)}
+                    className={`block rounded-md px-3 py-2 text-sm transition-colors ${
+                      pathname === href
+                        ? "bg-[var(--color-navy-800)] text-white"
+                        : "text-[var(--color-ink-soft)] hover:bg-[var(--color-navy-100)]"
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
           <Link href="/sobre-nosotros" className={linkClass("/sobre-nosotros")}>
             Nosotros
           </Link>

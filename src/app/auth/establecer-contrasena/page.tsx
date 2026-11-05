@@ -56,8 +56,8 @@ export default function EstablecerContrasenaPage() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center bg-[var(--color-navy-950)] px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white px-8 py-9 shadow-xl">
+    <div className="login-screen min-h-screen grid place-items-center px-4">
+      <div className="login-card w-full max-w-sm rounded-2xl px-8 py-9">
         <h1 className="text-center font-display text-xl font-semibold text-[var(--color-ink)]">
           Crear contraseña
         </h1>
@@ -83,7 +83,7 @@ export default function EstablecerContrasenaPage() {
                 required
                 minLength={6}
                 autoFocus
-                className="w-full rounded-lg border border-[var(--color-line)] px-3 py-2.5 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-navy-700)] focus:ring-2 focus:ring-[var(--color-navy-100)]"
+                className="login-field w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-[var(--color-navy-700)] focus:ring-2 focus:ring-[var(--color-navy-100)]"
               />
             </div>
             <div>
@@ -97,7 +97,7 @@ export default function EstablecerContrasenaPage() {
                 onChange={(event) => setConfirmacion(event.target.value)}
                 required
                 minLength={6}
-                className="w-full rounded-lg border border-[var(--color-line)] px-3 py-2.5 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-navy-700)] focus:ring-2 focus:ring-[var(--color-navy-100)]"
+                className="login-field w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-[var(--color-navy-700)] focus:ring-2 focus:ring-[var(--color-navy-100)]"
               />
             </div>
 
@@ -110,7 +110,7 @@ export default function EstablecerContrasenaPage() {
             <button
               type="submit"
               disabled={guardando}
-              className="w-full rounded-lg bg-[var(--color-navy-800)] py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--color-navy-900)] disabled:cursor-not-allowed disabled:opacity-60"
+              className="login-submit w-full rounded-lg py-2.5 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60"
             >
               {guardando ? "Guardando…" : "Guardar contraseña"}
             </button>

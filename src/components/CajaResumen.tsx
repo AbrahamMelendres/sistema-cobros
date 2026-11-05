@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { ResumenCaja, ResumenResponsable } from "@/lib/types";
@@ -25,6 +26,7 @@ export default function CajaResumen() {
   const [responsables, setResponsables] = useState<ResumenResponsable[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mostrarSaldosCero, setMostrarSaldosCero] = useState(false);
 
   useEffect(() => {
     async function cargarResumen() {
@@ -54,12 +56,20 @@ export default function CajaResumen() {
   }, [supabase]);
 
   const tarjetas = [
-    { label: "Total de ingresos", valor: resumen.total_ingresos, tono: "ok" },
-    { label: "Total de egresos", valor: resumen.total_egresos },
-    { label: "Pendientes por pagar", valor: resumen.pendientes_por_pagar, tono: "pending" },
-    { label: "Saldo actual en caja", valor: resumen.saldo_actual },
-    { label: "Saldo neto después de pendientes", valor: resumen.saldo_neto_despues_pendientes },
+    { label: "Saldo disponible", detalle: "Saldo actual en caja", valor: resumen.saldo_actual, tono: "primary" },
+    { label: "Ingresos", detalle: "Total acumulado", valor: resumen.total_ingresos, tono: "ok" },
+    { label: "Egresos", detalle: "Total acumulado", valor: resumen.total_egresos },
+    { label: "Pendientes", detalle: "Por pagar", valor: resumen.pendientes_por_pagar, tono: "pending" },
+    { label: "Saldo neto", detalle: "Después de pendientes", valor: resumen.saldo_neto_despues_pendientes },
   ];
+  const saldoNetoEsperado =
+    Number(resumen.saldo_actual) - Number(resumen.pendientes_por_pagar);
+  const diferenciaSaldoNeto =
+    Math.abs(Number(resumen.saldo_neto_despues_pendientes) - saldoNetoEsperado) > 0.01;
+  const responsablesVisibles = mostrarSaldosCero
+    ? responsables
+    : responsables.filter((item) => Math.abs(Number(item.dinero_bajo_responsabilidad) || 0) > 0.005);
+  const responsablesOcultos = responsables.length - responsablesVisibles.length;
 
   return (
     <div>
@@ -70,6 +80,23 @@ export default function CajaResumen() {
           Resumen general
         </span>
       </div>
+
+      <nav aria-label="Accesos rápidos de caja" className="mb-6 grid gap-3 sm:grid-cols-3">
+        {[
+          { href: "/caja/movimientos", titulo: "Registrar movimiento", detalle: "Agregar un ingreso o egreso" },
+          { href: "/caja/pendientes", titulo: "Ver pendientes", detalle: "Consultar y actualizar pendientes" },
+          { href: "/caja/custodia", titulo: "Revisar custodia", detalle: "Ver dinero por responsable" },
+        ].map((acceso) => (
+          <Link
+            key={acceso.href}
+            href={acceso.href}
+            className="rounded-xl border border-[var(--color-line)] bg-white px-4 py-3 transition-colors hover:border-[var(--color-navy-700)] hover:bg-[var(--color-navy-50)]"
+          >
+            <span className="block text-sm font-semibold text-[var(--color-navy-800)]">{acceso.titulo}</span>
+            <span className="mt-1 block text-xs text-[var(--color-ink-soft)]">{acceso.detalle}</span>
+          </Link>
+        ))}
+      </nav>
 
       {loading && (
         <div className="mb-6 rounded-xl border border-[var(--color-line)] bg-white px-4 py-8 text-center text-sm text-[var(--color-ink-soft)]">
@@ -85,13 +112,24 @@ export default function CajaResumen() {
 
       {!loading && !error && (
         <>
+          {diferenciaSaldoNeto && (
+            <p role="status" className="mb-4 rounded-lg border border-[var(--color-pending)] bg-[var(--color-pending-bg)] px-3 py-2 text-sm text-[var(--color-pending)]">
+              Revisa el resumen: el saldo neto informado ({formatoMoneda(Number(resumen.saldo_neto_despues_pendientes) || 0)}) no coincide con saldo actual menos pendientes ({formatoMoneda(saldoNetoEsperado)}).
+            </p>
+          )}
+
           <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-5">
             {tarjetas.map((tarjeta) => (
               <div
                 key={tarjeta.label}
-                className="rounded-xl border border-[var(--color-line)] bg-white px-4 py-4"
+                className={`rounded-xl border bg-white px-4 py-4 ${
+                  tarjeta.tono === "primary"
+                    ? "border-[var(--color-navy-700)] ring-1 ring-[var(--color-navy-700)]"
+                    : "border-[var(--color-line)]"
+                }`}
               >
-                <p className="mb-1 text-xs text-[var(--color-ink-soft)]">{tarjeta.label}</p>
+                <p className="text-sm font-medium text-[var(--color-ink)]">{tarjeta.label}</p>
+                <p className="mb-1 text-xs text-[var(--color-ink-soft)]">{tarjeta.detalle}</p>
                 <p
                   className={`font-display text-2xl font-semibold ${
                     tarjeta.tono === "ok"
@@ -108,9 +146,20 @@ export default function CajaResumen() {
           </div>
 
           <section className="overflow-hidden rounded-xl border border-[var(--color-line)] bg-white">
-            <div className="border-b border-[var(--color-line)] px-4 py-4">
-              <h2 className="font-display text-lg font-semibold text-[var(--color-ink)]">¿Quién tiene el dinero?</h2>
-              <p className="mt-1 text-xs text-[var(--color-ink-soft)]">Distribución del dinero por responsable.</p>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-line)] px-4 py-4">
+              <div>
+                <h2 className="font-display text-lg font-semibold text-[var(--color-ink)]">Dinero por responsable</h2>
+                <p className="mt-1 text-xs text-[var(--color-ink-soft)]">Saldos bajo responsabilidad de cada persona.</p>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-[var(--color-ink-soft)]">
+                <input
+                  type="checkbox"
+                  checked={mostrarSaldosCero}
+                  onChange={(event) => setMostrarSaldosCero(event.target.checked)}
+                  className="h-4 w-4 accent-[var(--color-navy-800)]"
+                />
+                Mostrar saldos en cero
+              </label>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -121,23 +170,36 @@ export default function CajaResumen() {
                   </tr>
                 </thead>
                 <tbody>
-                  {responsables.length === 0 ? (
+                  {responsablesVisibles.length === 0 ? (
                     <tr>
                       <td colSpan={2} className="px-4 py-8 text-center text-[var(--color-ink-soft)]">
-                        No hay responsables con dinero registrado.
+                        {responsables.length === 0
+                          ? "No hay responsables con dinero registrado."
+                          : "No hay saldos distintos de cero para mostrar."}
                       </td>
                     </tr>
                   ) : (
-                    responsables.map((item) => (
+                    responsablesVisibles.map((item) => {
+                      const saldo = Number(item.dinero_bajo_responsabilidad) || 0;
+                      return (
                       <tr key={item.responsable} className="border-b border-[var(--color-line)] last:border-0">
                         <td className="px-4 py-2.5">{item.responsable || "Sin responsable"}</td>
-                        <td className="px-4 py-2.5 text-right font-medium">{formatoMoneda(Number(item.dinero_bajo_responsabilidad) || 0)}</td>
+                        <td className={`px-4 py-2.5 text-right font-medium ${saldo < -0.005 ? "text-[var(--color-pending)]" : ""}`}>
+                          {formatoMoneda(saldo)}
+                          {saldo < -0.005 && <span className="ml-2 text-xs">Revisar</span>}
+                        </td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>
             </div>
+            {responsablesOcultos > 0 && !mostrarSaldosCero && (
+              <p className="border-t border-[var(--color-line)] px-4 py-2 text-xs text-[var(--color-ink-soft)]">
+                {responsablesOcultos} responsable{responsablesOcultos === 1 ? "" : "s"} con saldo cero oculto{responsablesOcultos === 1 ? "" : "s"}.
+              </p>
+            )}
           </section>
         </>
       )}
