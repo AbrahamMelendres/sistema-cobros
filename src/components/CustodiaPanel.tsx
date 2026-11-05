@@ -51,6 +51,10 @@ export default function CustodiaPanel() {
   const [monto, setMonto] = useState("");
   const [fecha, setFecha] = useState(hoyISO);
   const [observaciones, setObservaciones] = useState("");
+  const [filtroResponsable, setFiltroResponsable] = useState("");
+  const [fechaDesde, setFechaDesde] = useState("");
+  const [fechaHasta, setFechaHasta] = useState("");
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +92,9 @@ export default function CustodiaPanel() {
     setPuedeCrear(rolResult.data === true);
     setSaldos(saldosResult.data ?? []);
     setMovimientos((movimientosResult.data ?? []) as MovimientoCustodia[]);
+    if (rolResult.error) {
+      setError(`No se pudo verificar el permiso de administración: ${rolResult.error.message}`);
+    }
     setLoading(false);
   }
 
@@ -143,6 +150,40 @@ export default function CustodiaPanel() {
     setMensaje("Movimiento de custodia registrado correctamente.");
     await cargarDatos();
   }
+
+  async function eliminarMovimiento(movimiento: MovimientoCustodia) {
+    const confirmado = window.confirm(
+      `¿Eliminar permanentemente la ${movimiento.tipo.toLowerCase()} de ${formatoMoneda(Number(movimiento.monto) || 0)} de ${nombreResponsable(movimiento.responsable)}? Esta acción no se puede deshacer.`
+    );
+    if (!confirmado) return;
+
+    setError(null);
+    setMensaje(null);
+    setEliminandoId(movimiento.id);
+    const { data, error: deleteError } = await supabase
+      .from("custodia_movimientos")
+      .delete()
+      .eq("id", movimiento.id)
+      .select("id")
+      .single();
+    setEliminandoId(null);
+
+    if (deleteError || !data) {
+      setError(`No se pudo eliminar el movimiento de custodia${deleteError ? `: ${deleteError.message}` : "."}`);
+      return;
+    }
+
+    setMensaje("Movimiento de custodia eliminado.");
+    await cargarDatos();
+  }
+
+  const movimientosFiltrados = movimientos.filter((movimiento) => {
+    return (
+      (!filtroResponsable || movimiento.responsable_id === filtroResponsable) &&
+      (!fechaDesde || movimiento.fecha >= fechaDesde) &&
+      (!fechaHasta || movimiento.fecha <= fechaHasta)
+    );
+  });
 
   return (
     <div>
@@ -282,6 +323,56 @@ export default function CustodiaPanel() {
       <section className="overflow-hidden rounded-xl border border-[var(--color-line)] bg-white">
         <div className="border-b border-[var(--color-line)] px-4 py-4">
           <h2 className="font-display text-lg font-semibold text-[var(--color-ink)]">Historial de custodia</h2>
+          <p className="mt-1 text-xs text-[var(--color-ink-soft)]">Filtra para revisar entregas, gastos y devoluciones.</p>
+        </div>
+        <div className="grid gap-3 border-b border-[var(--color-line)] px-4 py-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="text-xs font-medium text-[var(--color-ink-soft)]">
+            Responsable
+            <select
+              value={filtroResponsable}
+              onChange={(event) => setFiltroResponsable(event.target.value)}
+              className="mt-1 block w-full rounded-lg border border-[var(--color-line)] px-3 py-2 text-sm font-normal text-[var(--color-ink)]"
+            >
+              <option value="">Todos</option>
+              {responsables.map((responsable) => (
+                <option key={responsable.id} value={responsable.id}>{responsable.nombre}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-medium text-[var(--color-ink-soft)]">
+            Desde
+            <input
+              type="date"
+              value={fechaDesde}
+              max={fechaHasta || undefined}
+              onChange={(event) => setFechaDesde(event.target.value)}
+              className="mt-1 block w-full rounded-lg border border-[var(--color-line)] px-3 py-2 text-sm font-normal text-[var(--color-ink)]"
+            />
+          </label>
+          <label className="text-xs font-medium text-[var(--color-ink-soft)]">
+            Hasta
+            <input
+              type="date"
+              value={fechaHasta}
+              min={fechaDesde || undefined}
+              onChange={(event) => setFechaHasta(event.target.value)}
+              className="mt-1 block w-full rounded-lg border border-[var(--color-line)] px-3 py-2 text-sm font-normal text-[var(--color-ink)]"
+            />
+          </label>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={() => {
+                setFiltroResponsable("");
+                setFechaDesde("");
+                setFechaHasta("");
+              }}
+              disabled={!filtroResponsable && !fechaDesde && !fechaHasta}
+              className="rounded-lg border border-[var(--color-line)] px-3 py-2 text-sm font-medium text-[var(--color-ink)] transition-colors hover:bg-[var(--color-navy-50)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Limpiar filtros
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -292,21 +383,35 @@ export default function CustodiaPanel() {
                 <th className="px-4 py-2.5 text-right font-medium text-[var(--color-ink-soft)]">Monto</th>
                 <th className="px-4 py-2.5 text-left font-medium text-[var(--color-ink-soft)]">Fecha</th>
                 <th className="px-4 py-2.5 text-left font-medium text-[var(--color-ink-soft)]">Observaciones</th>
+                {puedeCrear && <th className="px-4 py-2.5 text-right font-medium text-[var(--color-ink-soft)]">Acciones</th>}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-[var(--color-ink-soft)]">Cargando historial…</td></tr>
-              ) : movimientos.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-[var(--color-ink-soft)]">Aún no hay movimientos de custodia.</td></tr>
+                <tr><td colSpan={puedeCrear ? 6 : 5} className="px-4 py-8 text-center text-[var(--color-ink-soft)]">Cargando historial…</td></tr>
+              ) : movimientosFiltrados.length === 0 ? (
+                <tr><td colSpan={puedeCrear ? 6 : 5} className="px-4 py-8 text-center text-[var(--color-ink-soft)]">{movimientos.length === 0 ? "Aún no hay movimientos de custodia." : "No hay movimientos con esos filtros."}</td></tr>
               ) : (
-                movimientos.map((movimiento) => (
+                movimientosFiltrados.map((movimiento) => (
                   <tr key={movimiento.id} className="border-b border-[var(--color-line)] last:border-0">
                     <td className="px-4 py-2.5">{nombreResponsable(movimiento.responsable)}</td>
                     <td className="px-4 py-2.5">{movimiento.tipo === "Devolucion" ? "Devolución" : movimiento.tipo}</td>
                     <td className="px-4 py-2.5 text-right font-medium">{formatoMoneda(Number(movimiento.monto) || 0)}</td>
                     <td className="px-4 py-2.5 whitespace-nowrap">{movimiento.fecha}</td>
                     <td className="px-4 py-2.5 text-[var(--color-ink-soft)]">{movimiento.observaciones || "—"}</td>
+                    {puedeCrear && (
+                      <td className="px-4 py-2.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => void eliminarMovimiento(movimiento)}
+                          disabled={eliminandoId !== null}
+                          className="rounded-md border border-red-400/40 px-2.5 py-1 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+                          aria-label={`Eliminar ${movimiento.tipo.toLowerCase()} de ${nombreResponsable(movimiento.responsable)}`}
+                        >
+                          {eliminandoId === movimiento.id ? "Eliminando…" : "Eliminar"}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}

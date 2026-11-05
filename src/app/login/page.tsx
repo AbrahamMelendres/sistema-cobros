@@ -114,7 +114,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-white/50 mt-6">
-          Academia Técnica de Ingeniería y Tecnologías Informáticas
+          Donde nace el conocimiento, florece un futuro sin límites.
         </p>
       </div>
     </div>

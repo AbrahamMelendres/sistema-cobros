@@ -549,21 +549,25 @@ export default function RegistroDia() {
   ];
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
-        <h1 className="font-display text-2xl font-semibold">
-          {formatDiaLabel(fecha)}
-        </h1>
-        <div className="flex items-center gap-2">
+    <div className="day-page">
+      <div className="day-toolbar mb-6 flex items-center justify-between gap-4 flex-wrap">
+        <div className="day-heading">
+          <p className="day-eyebrow">Jornada activa</p>
+          <h1 className="font-display text-2xl font-semibold">
+            {formatDiaLabel(fecha)}
+          </h1>
+        </div>
+        <div className="day-toolbar-actions flex items-center gap-2">
           <input
             type="date"
             value={fecha}
             onChange={(e) => setFecha(e.target.value)}
+            aria-label="Fecha de la jornada"
             className="rounded-lg border border-[var(--color-line)] px-3 py-2 text-sm"
           />
           <button
             onClick={agregarFila}
-            className="rounded-lg bg-[var(--color-navy-800)] text-white text-sm font-medium px-4 py-2 hover:bg-[var(--color-navy-900)] transition-colors"
+            className="day-add-button rounded-lg bg-[var(--color-navy-800)] text-white text-sm font-medium px-4 py-2 hover:bg-[var(--color-navy-900)] transition-colors"
           >
             + Agregar registro
           </button>
@@ -654,7 +658,7 @@ export default function RegistroDia() {
       )}
 
       {fechasConDatos.length > 1 && (
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+        <div className="day-date-tabs flex gap-2 mb-4 overflow-x-auto pb-1">
           {fechasConDatos.map((f) => (
             <button
               key={f}
@@ -671,7 +675,7 @@ export default function RegistroDia() {
         </div>
       )}
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="day-search-row mb-4 flex flex-wrap items-center justify-between gap-3">
         <label className="flex min-w-[min(100%,20rem)] flex-1 items-center gap-2 rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 focus-within:border-[var(--color-navy-700)]">
           <span className="text-[var(--color-ink-soft)]" aria-hidden="true">⌕</span>
           <input
@@ -699,7 +703,182 @@ export default function RegistroDia() {
         </span>
       </div>
 
-      <div className="bg-white rounded-xl border border-[var(--color-line)] overflow-hidden">
+      <section className="day-mobile-records space-y-3 sm:hidden" aria-label="Registros del día">
+        {loading ? (
+          <div className="day-empty-state">Cargando registros…</div>
+        ) : registros.length === 0 ? (
+          <div className="day-empty-state">
+            <span className="day-empty-icon" aria-hidden="true">▤</span>
+            <h2>Sin registros todavía</h2>
+            <p>Usa <strong>Agregar registro</strong> para comenzar la jornada.</p>
+          </div>
+        ) : registrosFiltrados.length === 0 ? (
+          <div className="day-empty-state">No se encontraron registros con “{busqueda}”.</div>
+        ) : (
+          registrosFiltrados.map((r) => {
+            const equipos = equiposDelRegistro(r);
+            const estadoPago = r.estado_pago ?? (r.estado === "Cancelado" ? "Pagado" : "Pendiente");
+            const estadoEntrega = r.estado_entrega ?? "Pendiente";
+
+            return (
+              <article key={r.id} className="day-mobile-card">
+                <div className="day-card-heading">
+                  <span className={`day-record-number ${estadoPago === "Pagado" ? "is-paid" : "is-pending"}`}>
+                    #{r.numero ?? "—"}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="truncate">{r.nombre_completo || "Registro sin nombre"}</h2>
+                    <p className="truncate">
+                      CI: {r.ci || "—"} <span aria-hidden="true">·</span> Cant: {r.cantidad_equipos ?? equipos.length}
+                    </p>
+                  </div>
+                  <div className="day-card-amount">
+                    <strong>{Number(r.monto).toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                    <span>Bs</span>
+                  </div>
+                </div>
+
+                <div className="day-card-status-row">
+                  <span className={`day-status-pill ${estadoPago === "Pagado" ? "is-paid" : "is-pending"}`}>
+                    {estadoPago}
+                  </span>
+                  {r.celular ? (
+                    <a className="day-contact-link" href={`tel:${r.celular}`}>
+                      ☎ {r.celular}
+                    </a>
+                  ) : (
+                    <span className="day-muted">Sin teléfono</span>
+                  )}
+                </div>
+
+                <div className="day-card-details">
+                  <div>
+                    <span>Equipo / servicio</span>
+                    <strong>
+                      {equipos.map((equipo) => [
+                        equipo.tipo_equipo,
+                        equipo.servicios.map((servicio) => servicio === "Optimizacion" ? "Optimización" : servicio).join(", "),
+                      ].filter(Boolean).join(" · ") || "Sin especificar").join("; ")}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Método de pago</span>
+                    <strong>{r.metodo_pago === "QR" ? "Transferencia QR" : r.metodo_pago || "Sin especificar"}</strong>
+                  </div>
+                  <div>
+                    <span>Estado de entrega</span>
+                    <strong className={estadoEntrega === "Entregado" ? "day-delivery-done" : "day-delivery-pending"}>
+                      {estadoEntrega === "Entregado" ? "● " : "● "}{estadoEntrega}
+                      {r.fecha_entrega ? ` (${r.fecha_entrega.slice(5).replace("-", "/")})` : ""}
+                    </strong>
+                  </div>
+                </div>
+
+                {r.observaciones && (
+                  <p className="day-card-note">ⓘ {r.observaciones}</p>
+                )}
+
+                <details className="day-card-editor">
+                  <summary>Editar detalles del registro</summary>
+                  <div className="day-card-edit-grid">
+                    <label>Nombre completo
+                      <input defaultValue={r.nombre_completo ?? ""} onBlur={(e) => actualizarCampo(r.id, "nombre_completo", e.target.value)} />
+                    </label>
+                    <label>CI
+                      <input defaultValue={r.ci ?? ""} onBlur={(e) => actualizarCampo(r.id, "ci", e.target.value)} />
+                    </label>
+                    <label>Celular
+                      <input type="tel" defaultValue={r.celular ?? ""} onBlur={(e) => actualizarCampo(r.id, "celular", e.target.value)} />
+                    </label>
+                    <label>Cantidad de equipos
+                      <input type="number" min="1" step="1" defaultValue={r.cantidad_equipos ?? 1} onBlur={(e) => actualizarCantidadEquipos(r.id, Number(e.target.value))} />
+                    </label>
+                    <label>Método de pago
+                      <select
+                        value={r.metodo_pago ?? ""}
+                        onChange={(e) => actualizarCampo(r.id, "metodo_pago", (e.target.value || null) as MetodoPago | null)}
+                      >
+                        <option value="">Sin especificar</option>
+                        <option value="Efectivo">Efectivo</option>
+                        <option value="QR">QR</option>
+                      </select>
+                    </label>
+                    <label>Estado de pago
+                      <select value={estadoPago} onChange={(e) => actualizarPago(r.id, e.target.value as EstadoPago)}>
+                        <option value="Pendiente">Pendiente</option>
+                        <option value="Pagado">Pagado</option>
+                      </select>
+                    </label>
+                    <label>Estado de entrega
+                      <select value={estadoEntrega} onChange={(e) => actualizarEntrega(r.id, e.target.value as EstadoEntrega)}>
+                        <option value="Pendiente">Pendiente</option>
+                        <option value="Entregado">Entregado</option>
+                        <option value="No recogido">No recogido</option>
+                      </select>
+                    </label>
+                    <label className="day-edit-full">Observaciones
+                      <textarea defaultValue={r.observaciones ?? ""} onBlur={(e) => actualizarCampo(r.id, "observaciones", e.target.value)} />
+                    </label>
+                  </div>
+
+                  <div className="day-equipment-editors">
+                    {equipos.map((equipo, indice) => (
+                      <div key={indice} className="day-equipment-editor">
+                        <label>Equipo {indice + 1}
+                          <select
+                            value={equipo.tipo_equipo ?? ""}
+                            onChange={(e) => actualizarEquipo(r.id, indice, { tipo_equipo: (e.target.value || null) as TipoEquipo | null })}
+                          >
+                            <option value="">Sin tipo</option>
+                            <option value="Pc">Pc</option>
+                            <option value="Laptop">Laptop</option>
+                          </select>
+                        </label>
+                        <div className="day-service-options">
+                          {SERVICIOS.map((servicio) => {
+                            const seleccionado = equipo.servicios.includes(servicio);
+                            return (
+                              <label key={servicio}>
+                                <input
+                                  type="checkbox"
+                                  checked={seleccionado}
+                                  onChange={() => actualizarEquipo(r.id, indice, {
+                                    servicios: seleccionado
+                                      ? equipo.servicios.filter((item) => item !== servicio)
+                                      : [...equipo.servicios, servicio],
+                                  })}
+                                />
+                                {servicio === "Optimizacion" ? "Optimización" : servicio}
+                              </label>
+                            );
+                          })}
+                        </div>
+                        {equipo.servicios.includes("Otros") && (
+                          <label>Detalle de otros
+                            <input
+                              required
+                              defaultValue={equipo.descripcion}
+                              onBlur={(e) => actualizarEquipo(r.id, indice, { descripcion: e.target.value })}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="day-card-actions">
+                    {r.celular && <a href={`tel:${r.celular}`}>☎ Contactar</a>}
+                    <span>{savingId === r.id ? "Guardando…" : "Los cambios se guardan al salir del campo."}</span>
+                    <button type="button" onClick={() => borrarFila(r.id)}>Eliminar registro</button>
+                  </div>
+                </details>
+              </article>
+            );
+          })
+        )}
+      </section>
+
+      <div className="day-desktop-table hidden sm:block bg-white rounded-xl border border-[var(--color-line)] overflow-hidden">
         <div className="max-h-[calc(100vh-16rem)] min-h-[18rem] overflow-auto">
           <table className="w-full text-sm">
             <thead>

@@ -1,6 +1,5 @@
-import PendientesPanel from "@/components/PendientesPanel";
+import { redirect } from "next/navigation";
 
-// TODO: crear componente.
 export default function PendientesPage() {
-  return <PendientesPanel />;
+  redirect("/caja/control-dinero?vista=pendientes");
 }

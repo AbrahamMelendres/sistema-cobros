@@ -50,9 +50,26 @@ function TeamMemberCard({ name, role, photo, positionIcon }: TeamMemberCardProps
 
 export default function SobreNosotros() {
   return <div className="pb-8">
-    <header className="relative mb-12 overflow-hidden bg-gradient-to-br from-[var(--color-navy-950)] to-[var(--color-navy-800)] px-6 py-12 text-center text-white sm:px-10 sm:py-16 sm:text-left">
+    <header className="relative mb-8 overflow-hidden bg-gradient-to-br from-[var(--color-navy-950)] to-[var(--color-navy-800)] px-5 py-5 text-center text-white sm:px-8 sm:py-6 sm:text-left">
       <div className="absolute inset-0 opacity-[0.08] [background-image:radial-gradient(circle_at_20px_20px,transparent_0_5px,white_6px_7px,transparent_8px),linear-gradient(135deg,transparent_48%,white_49%_50%,transparent_51%)] [background-size:80px_80px]" />
-      <div className="relative flex flex-col items-center gap-7 sm:flex-row sm:gap-8"><div className="rounded-full bg-white/10 p-2 shadow-[0_0_32px_rgba(147,197,253,0.3)] ring-1 ring-white/20"><Image src="/logo.jpeg" alt="Academia Técnica de Ingeniería y Tecnologías Informáticas" width={136} height={136} className="h-28 w-28 rounded-full border border-white/20 object-cover sm:h-32 sm:w-32" priority /></div><div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-blue-200">Academia Técnica de Ingeniería y Tecnologías Informáticas (CCA)</p><h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">Sobre Nosotros</h1></div></div>
+      <div className="relative flex flex-col items-center gap-4 sm:flex-row sm:gap-5">
+        <div className="rounded-full bg-white/10 p-1.5 shadow-[0_0_24px_rgba(147,197,253,0.25)] ring-1 ring-white/20">
+          <Image
+            src="/logo.jpeg"
+            alt="Academia Técnica de Ingeniería y Tecnologías Informáticas"
+            width={88}
+            height={88}
+            className="h-16 w-16 rounded-full border border-white/20 object-cover sm:h-20 sm:w-20"
+            priority
+          />
+        </div>
+        <div>
+          <p className="mb-1 text-xs text-blue-200 sm:text-sm">
+            Donde nace el conocimiento, florece un futuro sin límites.
+          </p>
+          <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Sobre Nosotros</h1>
+        </div>
+      </div>
     </header>
 
     <section className="mb-14 grid gap-8 py-8 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16"><div><p className="mb-3 border-l-4 border-[var(--color-navy-700)] pl-3 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--color-navy-700)]">Nuestra historia</p><h2 className="font-display text-3xl font-bold text-[var(--color-ink)] sm:text-4xl">Aprender haciendo.</h2></div><p className="max-w-2xl border-l-2 border-[var(--color-navy-700)] pl-6 text-lg leading-8 text-[var(--color-ink-soft)]">Este proyecto nació de la necesidad de aprender y poner en práctica los conocimientos adquiridos, transformando el aprendizaje académico en soluciones reales para la comunidad.</p></section>

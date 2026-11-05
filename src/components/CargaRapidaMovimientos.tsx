@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import SelectConCrear from "@/components/SelectConCrear";
 
@@ -30,9 +30,9 @@ function hoyISO() {
   return fechaLocal.toISOString().slice(0, 10);
 }
 
-function filaVacia(): FilaMovimiento {
+function filaVacia(id: string): FilaMovimiento {
   return {
-    id: crypto.randomUUID(),
+    id,
     fecha: hoyISO(),
     actividad_id: "",
     tipo: "",
@@ -63,6 +63,7 @@ export default function CargaRapidaMovimientos() {
   const [puedeCrear, setPuedeCrear] = useState(false);
   const [filas, setFilas] = useState<FilaMovimiento[]>([]);
   const [filasInvalidas, setFilasInvalidas] = useState<Set<string>>(new Set());
+  const siguienteIdFila = useRef(0);
   const [loadingCatalogos, setLoadingCatalogos] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,7 +132,8 @@ export default function CargaRapidaMovimientos() {
   }
 
   function agregarFila() {
-    setFilas((actuales) => [...actuales, filaVacia()]);
+    const id = `fila-${siguienteIdFila.current++}`;
+    setFilas((actuales) => [...actuales, filaVacia(id)]);
     setError(null);
     setMensaje(null);
   }

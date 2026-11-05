@@ -206,7 +206,7 @@ export default function InformeDashboard() {
             </div>
             <div>
               <p className="font-display text-base font-semibold text-[var(--color-ink)]">Registro de Cobros</p>
-              <p className="text-xs text-[var(--color-ink-soft)]">Academia Técnica de Ingeniería y Tecnologías Informáticas</p>
+              <p className="text-xs text-[var(--color-ink-soft)]">Donde nace el conocimiento, florece un futuro sin límites.</p>
             </div>
           </div>
           <div className="text-right">

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Registro de Cobros — Academia Técnica de Ingeniería y Tecnologías Informáticas",
-  description: "Sistema de registro de cobros",
+  title: "Registro de Cobros",
+  description: "Donde nace el conocimiento, florece un futuro sin límites.",
   icons: {
     icon: "/logo.jpeg",
   },

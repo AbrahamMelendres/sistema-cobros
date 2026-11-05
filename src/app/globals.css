@@ -47,8 +47,14 @@
   --font-sans: var(--font-sans);
 }
 
+html {
+  min-height: 100%;
+  background-color: #071629;
+}
+
 body {
-  background: var(--background);
+  min-height: 100vh;
+  background-color: #071629;
   color: var(--foreground);
   font-family: var(--font-sans);
   letter-spacing: -0.01em;
@@ -83,7 +89,7 @@ body {
   background-size: auto, auto, 40px 40px, 40px 40px;
 }
 
-.app-theme header {
+.app-theme .site-header {
   position: sticky;
   top: 0;
   z-index: 30;
@@ -126,6 +132,432 @@ body {
 .app-theme textarea:focus-visible {
   outline: 2px solid #65baff;
   outline-offset: 2px;
+}
+
+@media (max-width: 639px) {
+  .app-theme .site-header {
+    background: #090e19;
+  }
+
+  .day-page {
+    min-height: calc(100vh - 4rem);
+    margin: -2rem -1rem -6rem;
+    padding: 1.25rem 1rem 7.5rem;
+    background: #090e19;
+    color: #f8fafc;
+  }
+
+  .day-toolbar {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .day-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .day-heading h1 {
+    font-size: 1.35rem;
+    line-height: 1.2;
+  }
+
+  .day-eyebrow {
+    grid-column: 1 / -1;
+    color: #34d399;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .day-heading {
+    display: block;
+  }
+
+  .day-heading .day-eyebrow {
+    margin-bottom: 0.35rem;
+  }
+
+  .day-toolbar-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .day-toolbar-actions > input {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-height: 2.75rem;
+    border-radius: 0.9rem;
+    background: #101827;
+  }
+
+  .day-toolbar-actions .day-add-button {
+    grid-column: 1 / -1;
+    min-height: 3.25rem;
+    border: 0;
+    border-radius: 0.9rem;
+    background: linear-gradient(110deg, #10b981, #059669);
+    box-shadow: 0 8px 22px rgb(16 185 129 / 18%);
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+
+  .day-toolbar-actions > label,
+  .day-toolbar-actions > button:not(.day-add-button) {
+    display: flex;
+    min-width: 0;
+    min-height: 2.65rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #28364d;
+    border-radius: 0.7rem;
+    background: #131e31;
+    padding: 0.4rem;
+    color: #dbe5f2;
+    font-size: 0.7rem;
+    text-align: center;
+  }
+
+  .day-date-tabs button {
+    border-color: #28364d;
+    background: #131e31;
+    color: #a9bfd8;
+  }
+
+  .day-date-tabs button[class*="bg-[var(--color-navy-800)]"] {
+    border-color: #10b981;
+    background: rgb(16 185 129 / 15%);
+    color: #6ee7b7;
+  }
+
+  .day-search-row {
+    gap: 0.5rem;
+    border: 1px solid #33435d;
+    border-radius: 0.85rem;
+    background: #101827;
+    padding: 0.1rem 0.75rem;
+  }
+
+  .day-search-row > label {
+    min-height: 2.5rem;
+    border: 0;
+    background: transparent;
+    padding: 0;
+  }
+
+  .day-search-row > span {
+    flex-shrink: 0;
+    color: #a9bfd8;
+  }
+
+  .day-mobile-records {
+    padding-bottom: 0.5rem;
+  }
+
+  .day-mobile-card,
+  .day-empty-state {
+    overflow: hidden;
+    border: 1px solid #26354c;
+    border-radius: 1.15rem;
+    background: #101827;
+    padding: 1rem;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 16%);
+  }
+
+  .day-card-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+
+  .day-record-number {
+    display: grid;
+    width: 2.6rem;
+    height: 2.6rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid;
+    border-radius: 0.8rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+
+  .day-record-number.is-paid {
+    border-color: rgb(16 185 129 / 35%);
+    background: rgb(16 185 129 / 12%);
+    color: #6ee7b7;
+  }
+
+  .day-record-number.is-pending {
+    border-color: rgb(245 158 11 / 35%);
+    background: rgb(245 158 11 / 12%);
+    color: #fbbf24;
+  }
+
+  .day-card-heading h2 {
+    overflow: hidden;
+    color: #f8fafc;
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .day-card-heading p,
+  .day-muted {
+    color: #a9bfd8;
+    font-size: 0.72rem;
+  }
+
+  .day-card-amount {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: baseline;
+    gap: 0.2rem;
+    color: #f8fafc;
+    font-size: 0.7rem;
+  }
+
+  .day-card-amount strong {
+    font-size: 1.05rem;
+    font-weight: 750;
+  }
+
+  .day-card-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin: 0.65rem 0;
+  }
+
+  .day-status-pill {
+    border: 1px solid;
+    border-radius: 999px;
+    padding: 0.18rem 0.55rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+  }
+
+  .day-status-pill.is-paid {
+    border-color: rgb(16 185 129 / 45%);
+    background: rgb(16 185 129 / 12%);
+    color: #6ee7b7;
+  }
+
+  .day-status-pill.is-pending {
+    border-color: rgb(245 158 11 / 45%);
+    background: rgb(245 158 11 / 12%);
+    color: #fbbf24;
+  }
+
+  .day-contact-link {
+    color: #a9bfd8;
+    font-size: 0.72rem;
+    text-decoration: none;
+  }
+
+  .day-card-details {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    border: 1px solid #202d42;
+    border-radius: 0.85rem;
+    background: #131e31;
+    padding: 0.75rem;
+  }
+
+  .day-card-details > div {
+    min-width: 0;
+  }
+
+  .day-card-details span {
+    display: block;
+    margin-bottom: 0.2rem;
+    color: #9aabc1;
+    font-size: 0.63rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .day-card-details strong {
+    display: block;
+    overflow-wrap: anywhere;
+    color: #e2e8f0;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .day-card-details .day-delivery-done {
+    color: #34d399;
+  }
+
+  .day-card-details .day-delivery-pending {
+    color: #fbbf24;
+  }
+
+  .day-card-note {
+    margin-top: 0.65rem;
+    border: 1px solid #202d42;
+    border-radius: 0.7rem;
+    background: #0c1422;
+    padding: 0.65rem;
+    color: #d2dbe7;
+    font-size: 0.75rem;
+    font-style: italic;
+    line-height: 1.45;
+  }
+
+  .day-card-editor {
+    margin-top: 0.75rem;
+    border-top: 1px solid #26354c;
+    padding-top: 0.65rem;
+  }
+
+  .day-card-editor summary {
+    cursor: pointer;
+    color: #6ee7b7;
+    font-size: 0.78rem;
+    font-weight: 650;
+  }
+
+  .day-card-edit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+    margin-top: 0.75rem;
+  }
+
+  .day-card-edit-grid label,
+  .day-equipment-editor > label {
+    display: block;
+    min-width: 0;
+    color: #9aabc1;
+    font-size: 0.68rem;
+  }
+
+  .day-card-edit-grid input,
+  .day-card-edit-grid select,
+  .day-card-edit-grid textarea,
+  .day-equipment-editor select,
+  .day-equipment-editor > label > input {
+    width: 100%;
+    min-height: 2.5rem;
+    margin-top: 0.25rem;
+    border: 1px solid #2e3c53;
+    border-radius: 0.6rem;
+    background: #0b1422;
+    padding: 0.55rem;
+    color: #f1f5f9;
+    font-size: 0.8rem;
+  }
+
+  .day-card-edit-grid .day-edit-full {
+    grid-column: 1 / -1;
+  }
+
+  .day-card-edit-grid textarea {
+    min-height: 4rem;
+  }
+
+  .day-equipment-editors {
+    display: grid;
+    gap: 0.65rem;
+    margin-top: 0.75rem;
+  }
+
+  .day-equipment-editor {
+    border: 1px solid #28364d;
+    border-radius: 0.75rem;
+    padding: 0.65rem;
+  }
+
+  .day-service-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.3rem;
+    margin-top: 0.55rem;
+  }
+
+  .day-service-options label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: #cbd5e1;
+    font-size: 0.72rem;
+  }
+
+  .day-service-options input {
+    accent-color: #10b981;
+  }
+
+  .day-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 0.8rem;
+  }
+
+  .day-card-actions a,
+  .day-card-actions button {
+    border: 1px solid #2e3c53;
+    border-radius: 0.65rem;
+    background: #182438;
+    padding: 0.45rem 0.65rem;
+    color: #e2e8f0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .day-card-actions button {
+    border-color: rgb(248 113 113 / 35%);
+    color: #fca5a5;
+  }
+
+  .day-card-actions span {
+    color: #94a3b8;
+    font-size: 0.65rem;
+  }
+
+  .day-empty-state {
+    border-style: dashed;
+    background: #0c1422;
+    padding: 2rem 1.25rem;
+    text-align: center;
+  }
+
+  .day-empty-icon {
+    display: grid;
+    width: 3rem;
+    height: 3rem;
+    margin: 0 auto 0.8rem;
+    place-items: center;
+    border: 1px solid #2e3c53;
+    border-radius: 1rem;
+    background: #172338;
+    color: #34d399;
+    font-size: 1.4rem;
+  }
+
+  .day-empty-state h2 {
+    color: #e2e8f0;
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+
+  .day-empty-state p {
+    margin-top: 0.4rem;
+    color: #a9bfd8;
+    font-size: 0.78rem;
+  }
 }
 
 .login-screen {

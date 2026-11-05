@@ -20,14 +20,14 @@ export default async function ProtectedLayout({
     .from("profiles")
     .select("nombre_completo")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
 
   const nombre = profile?.nombre_completo ?? user.email ?? "Usuario";
 
   return (
     <div className="app-theme min-h-screen bg-[var(--color-paper)]">
       <Navbar nombre={nombre} />
-      <main className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">{children}</main>
+      <main className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 sm:pb-8">{children}</main>
     </div>
   );
 }

@@ -1,6 +1,5 @@
-import CustodiaPanel from "@/components/CustodiaPanel";
+import { redirect } from "next/navigation";
 
-// TODO: crear componente.
 export default function CustodiaPage() {
-  return <CustodiaPanel />;
+  redirect("/caja/control-dinero?vista=custodia");
 }

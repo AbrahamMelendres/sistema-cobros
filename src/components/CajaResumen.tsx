@@ -84,15 +84,15 @@ export default function CajaResumen() {
       <nav aria-label="Accesos rápidos de caja" className="mb-6 grid gap-3 sm:grid-cols-3">
         {[
           { href: "/caja/movimientos", titulo: "Registrar movimiento", detalle: "Agregar un ingreso o egreso" },
-          { href: "/caja/pendientes", titulo: "Ver pendientes", detalle: "Consultar y actualizar pendientes" },
-          { href: "/caja/custodia", titulo: "Revisar custodia", detalle: "Ver dinero por responsable" },
+          { href: "/caja/control-dinero?vista=pendientes", titulo: "Ver pendientes", detalle: "Consultar y actualizar pendientes" },
+          { href: "/caja/control-dinero?vista=custodia", titulo: "Revisar custodia", detalle: "Ver dinero por responsable" },
         ].map((acceso) => (
           <Link
             key={acceso.href}
             href={acceso.href}
-            className="rounded-xl border border-[var(--color-line)] bg-white px-4 py-3 transition-colors hover:border-[var(--color-navy-700)] hover:bg-[var(--color-navy-50)]"
+            className="group rounded-xl border border-[var(--color-line)] bg-white px-4 py-3 transition-colors hover:border-[var(--color-navy-700)] hover:bg-[var(--color-navy-50)]"
           >
-            <span className="block text-sm font-semibold text-[var(--color-navy-800)]">{acceso.titulo}</span>
+            <span className="block text-sm font-semibold text-[var(--color-ink)] transition-colors group-hover:text-[#7dd3fc]">{acceso.titulo}</span>
             <span className="mt-1 block text-xs text-[var(--color-ink-soft)]">{acceso.detalle}</span>
           </Link>
         ))}
